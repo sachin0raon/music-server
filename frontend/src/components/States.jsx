@@ -1,37 +1,43 @@
-import { WarningCircle } from "@phosphor-icons/react";
+import { MusicNotes, WarningCircle } from "@phosphor-icons/react";
+import GlassPanel from "./GlassPanel";
+import { Button } from "./Button";
 
 export function Skeleton({ rows = 6 }) {
   return (
-    <div className="glass animate-pulse rounded-card px-4" aria-busy="true" aria-label="Loading">
+    <GlassPanel className="p-2" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex h-[68px] items-center gap-3.5 border-b border-line last:border-0">
-          <div className="h-11 w-11 rounded-xl bg-white/10" />
-          <div className="flex-1 space-y-2"><div className="h-3.5 w-2/5 rounded bg-white/10" /><div className="h-3 w-1/4 rounded bg-white/[0.06]" /></div>
-          <div className="h-3 w-8 rounded bg-white/[0.06]" />
+        <div key={i} className="flex h-16 items-center gap-3.5 pl-2 pr-3">
+          <div className="shimmer h-12 w-12 rounded-xl" />
+          <div className="flex-1 space-y-2">
+            <div className="shimmer h-3.5 rounded" style={{ width: `${48 - (i % 3) * 8}%` }} />
+            <div className="shimmer h-3 w-1/4 rounded" />
+          </div>
+          <div className="shimmer h-3 w-9 rounded" />
         </div>
       ))}
-    </div>
+    </GlassPanel>
   );
 }
 
-export function Empty({ title, children, action }) {
+export function Empty({ title, children, action, icon: Icon = MusicNotes }) {
   return (
-    <div className="glass rounded-card px-6 py-10">
-      <h2 className="text-lg font-medium">{title}</h2>
-      <p className="mt-1.5 max-w-[34ch] text-[15px] leading-relaxed text-mute">{children}</p>
-      {action && <div className="mt-5">{action}</div>}
-    </div>
+    <GlassPanel className="flex flex-col items-center px-6 py-12 text-center">
+      <span className="mb-5 grid h-16 w-16 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><Icon size={30} weight="duotone" /></span>
+      <h2 className="text-heading font-semibold">{title}</h2>
+      <p className="mt-2 max-w-[36ch] text-body text-mute">{children}</p>
+      {action && <div className="mt-6">{action}</div>}
+    </GlassPanel>
   );
 }
 
 export function ErrorBox({ message, onRetry }) {
   return (
-    <div role="alert" className="glass flex items-start gap-3 rounded-card px-5 py-5">
-      <WarningCircle size={24} className="mt-0.5 shrink-0 text-[#ff8a8a]" />
-      <div className="flex-1">
-        <p className="text-[15px]">{message}</p>
-        {onRetry && <button onClick={onRetry} className="btn glass mt-3">Try again</button>}
+    <GlassPanel role="alert" className="flex items-start gap-3 px-5 py-5">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-control bg-danger-soft text-danger"><WarningCircle size={22} /></span>
+      <div className="flex-1 pt-1.5">
+        <p className="text-body">{message}</p>
+        {onRetry && <Button onClick={onRetry} className="mt-3">Try again</Button>}
       </div>
-    </div>
+    </GlassPanel>
   );
 }

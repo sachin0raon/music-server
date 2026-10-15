@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Check, ListPlus, MinusCircle, ShareNetwork, Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
+import Field from "./Field";
+import { Button } from "./Button";
 import { api } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
 
 function Item({ icon: Icon, children, onClick, danger, disabled }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className={`flex min-h-12 w-full items-center gap-3.5 rounded-2xl px-2 text-left text-[16px] disabled:opacity-50 ${danger ? "text-[#ff8a8a]" : ""}`}>
+      className={`interactive flex min-h-12 w-full items-center gap-3.5 rounded-tile px-2 text-left text-body disabled:opacity-50 ${danger ? "text-danger" : ""}`}>
       <Icon size={22} className={danger ? "" : "text-mute"} />{children}
     </button>
   );
@@ -38,16 +40,16 @@ function PlaylistPicker({ track, onDone }) {
 
   return (
     <div>
-      {note && <p role="status" className="mb-2 flex items-center gap-2 text-[15px] text-accent"><Check size={18} weight="bold" />{note}</p>}
-      {err && <p role="alert" className="mb-2 text-[15px] text-[#ff8a8a]">{err}</p>}
+      {note && <p role="status" className="mb-2 flex items-center gap-2 text-small text-accent"><Check size={18} weight="bold" />{note}</p>}
+      {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
       {loading && <p className="py-3 text-mute">Loading playlists</p>}
-      {error && <p role="alert" className="py-3 text-[#ff8a8a]">{error}</p>}
+      {error && <p role="alert" className="py-3 text-danger">{error}</p>}
       {data?.map((p) => <Item key={p.id} icon={ListPlus} onClick={() => add(p)}>{p.name}</Item>)}
       <form onSubmit={create} className="mt-3 flex gap-2">
-        <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="New playlist name" maxLength={100} aria-label="New playlist name" />
-        <button className="btn btn-accent" disabled={!name.trim()}>Create</button>
+        <Field className="flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="New playlist name" maxLength={100} aria-label="New playlist name" />
+        <Button variant="accent" className="!min-h-12" disabled={!name.trim()}>Create</Button>
       </form>
-      <button onClick={onDone} className="btn glass mt-4 w-full">Done</button>
+      <Button onClick={onDone} className="mt-4 w-full">Done</Button>
     </div>
   );
 }
@@ -72,16 +74,16 @@ export default function TrackMenu({ track, onClose, playlistId }) {
 
   return (
     <Sheet title={track.title} onClose={onClose}>
-      {err && <p role="alert" className="mb-2 text-[15px] text-[#ff8a8a]">{err}</p>}
+      {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
       {view === "playlists" && <PlaylistPicker track={track} onDone={onClose} />}
       {view === "confirm" && (
         <div>
-          <p className="text-[15px] leading-relaxed text-mute">
+          <p className="text-body text-mute">
             {track.is_shared ? "This removes the track for everyone and takes it out of their playlists. " : "This removes the track and its file from the server. "}It can't be undone.
           </p>
           <div className="mt-4 flex gap-2">
-            <button onClick={() => setView("actions")} className="btn glass flex-1">Keep it</button>
-            <button onClick={remove} disabled={busy} className="btn flex-1 bg-[#ff8a8a] text-[#1a0a0a]">Delete track</button>
+            <Button onClick={() => setView("actions")} className="flex-1">Keep it</Button>
+            <Button variant="danger" onClick={remove} disabled={busy} className="flex-1">Delete track</Button>
           </div>
         </div>
       )}

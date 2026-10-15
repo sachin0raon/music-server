@@ -1,23 +1,25 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import useFocusTrap from "./useFocusTrap";
 import { motion, useReducedMotion } from "motion/react";
 
 export default function Sheet({ title, onClose, children }) {
   const reduce = useReducedMotion();
+  const root = useRef(null);
+  useFocusTrap(root);
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <motion.div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}
+    <motion.div ref={root} className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60" />
-      <motion.div className="glass relative max-h-[85dvh] w-full max-w-xl overflow-y-auto rounded-t-[28px] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3"
-        style={{ background: "rgba(20,22,26,0.9)" }}
+      <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+      <motion.div className="glass-overlay relative max-h-[85dvh] w-full max-w-xl overflow-y-auto rounded-t-[28px] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3"
         initial={{ y: reduce ? 0 : "100%" }} animate={{ y: 0 }} exit={{ y: reduce ? 0 : "100%" }}
         transition={{ type: "spring", damping: 32, stiffness: 380 }}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-        <h2 className="mb-2 truncate text-lg font-medium">{title}</h2>
+        <h2 className="mb-2 truncate text-heading font-semibold">{title}</h2>
         {children}
       </motion.div>
     </motion.div>

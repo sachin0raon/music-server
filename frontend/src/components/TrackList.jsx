@@ -4,6 +4,8 @@ import { Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
+import GlassPanel from "./GlassPanel";
+import { Button } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
 import { usePlayer, useTracks } from "../state";
 
@@ -21,23 +23,23 @@ export default function TrackList({ scope, q, empty, featured }) {
   return (
     <>
       {latest && (
-        <section className="glass mb-4 flex gap-4 rounded-card p-3.5">
-          <Cover track={latest} className="h-[122px] w-[122px]" rounded="rounded-2xl" />
+        <GlassPanel as="section" className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-5">
+          <Cover track={latest} className="h-[122px] w-[122px] shadow-lift sm:h-40 sm:w-40" rounded="rounded-2xl" />
           <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
             <div>
-              <p className="text-sm text-mute">Latest upload</p>
-              <h2 className="mt-1 truncate text-[22px] font-medium tracking-tight">{latest.title}</h2>
-              <p className="truncate text-sm text-mute">{latest.artist}</p>
+              <p className="text-micro font-medium uppercase tracking-wider text-accent">Latest upload</p>
+              <h2 className="mt-1.5 truncate text-heading font-semibold sm:text-title">{latest.title}</h2>
+              <p className="truncate text-small text-mute sm:text-body">{latest.artist}</p>
             </div>
-            <button onClick={() => playTrack(latest, items)} className="btn btn-accent self-start"><Play weight="fill" size={16} />Play</button>
+            <Button variant="accent" onClick={() => playTrack(latest, items)} className="self-start"><Play weight="fill" size={16} />Play</Button>
           </div>
-        </section>
+        </GlassPanel>
       )}
-      <ul className="glass rounded-card px-4">
+      <GlassPanel as="ul" className="p-2">
         {items.map((t) => <TrackRow key={t.id} track={t} list={items} onMenu={setMenu} />)}
-      </ul>
-      {error && <p role="alert" className="mt-3 text-[15px] text-[#ff8a8a]">{error}</p>}
-      {items.length < total && <button onClick={loadMore} disabled={busy} className="btn glass mt-4 w-full">{busy ? "Loading" : "Show more"}</button>}
+      </GlassPanel>
+      {error && <p role="alert" className="mt-3 text-small text-danger">{error}</p>}
+      {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}
       <AnimatePresence>{menu && <TrackMenu key="menu" track={menu} onClose={() => setMenu(null)} />}</AnimatePresence>
     </>
   );

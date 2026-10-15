@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { CaretLeft, Check, UploadSimple, WarningCircle } from "@phosphor-icons/react";
+import { Check, UploadSimple, WarningCircle } from "@phosphor-icons/react";
+import PageHeader from "../components/PageHeader";
+import GlassPanel from "../components/GlassPanel";
+import { Button } from "../components/Button";
 import { uploadFile } from "../api";
 import { useData } from "../state";
 
@@ -38,44 +41,43 @@ export default function Upload() {
 
   return (
     <>
-      <Link to="/" className="mb-3 inline-flex min-h-11 items-center gap-1 text-[15px] text-mute"><CaretLeft size={16} />Library</Link>
-      <h1 className="text-[40px] font-medium leading-tight tracking-tighter">Upload</h1>
-      <div onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+      <PageHeader title="Upload" back={{ to: "/", label: "Library" }} className="mb-4" />
+      <GlassPanel onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); add(e.dataTransfer.files); }}
-        className={`glass mt-4 rounded-card border-dashed p-6 text-left ${over ? "!border-accent" : ""}`}>
-        <UploadSimple size={28} className="text-mute" />
-        <p className="mt-3 text-lg font-medium">Add music to your library</p>
-        <p className="mt-1 text-[15px] text-mute">Drop files here or choose them. mp3, flac, m4a, ogg, opus and wav. Uploads are private until you share them.</p>
-        <button className="btn btn-accent mt-4" onClick={() => input.current.click()}>Choose files</button>
+        className={`flex flex-col items-start border-dashed p-6 text-left transition-colors duration-200 sm:p-8 ${over ? "!border-accent !bg-accent-soft" : ""}`}>
+        <span className="grid h-14 w-14 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><UploadSimple size={28} /></span>
+        <p className="mt-4 text-heading font-semibold">Add music to your library</p>
+        <p className="mt-1 max-w-[52ch] text-body text-mute">Drop files here or choose them. mp3, flac, m4a, ogg, opus and wav. Uploads are private until you share them.</p>
+        <Button variant="accent" className="mt-5" onClick={() => input.current.click()}>Choose files</Button>
         <input ref={input} type="file" multiple accept=".mp3,.flac,.m4a,.ogg,.opus,.wav,audio/*" className="hidden"
           onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
-      </div>
+      </GlassPanel>
 
       {files.length > 0 && (
-        <ul className="glass mt-5 rounded-card px-4" aria-live="polite">
+        <GlassPanel as="ul" className="mt-5 px-4" aria-live="polite">
           {files.map((f) => (
             <li key={f.id} className="border-b border-line py-3.5 last:border-0">
               <div className="flex items-center gap-3">
-                <span className="min-w-0 flex-1 truncate text-[15px]">{f.file.name}</span>
+                <span className="min-w-0 flex-1 truncate text-body">{f.file.name}</span>
                 {f.status === "ok" && <Check size={18} weight="bold" className="text-accent" />}
-                {(f.status === "error" || f.status === "duplicate") && <WarningCircle size={18} className={f.status === "error" ? "text-[#ff8a8a]" : "text-mute"} />}
+                {(f.status === "error" || f.status === "duplicate") && <WarningCircle size={18} className={f.status === "error" ? "text-danger" : "text-mute"} />}
               </div>
-              <p className={`mt-0.5 text-sm ${f.status === "error" ? "text-[#ff8a8a]" : "text-mute"}`}>
+              <p className={`mt-0.5 text-small ${f.status === "error" ? "text-danger" : "text-mute"}`}>
                 {f.status === "error" || f.status === "duplicate" ? (f.detail || LABEL[f.status]) : LABEL[f.status]}
               </p>
               {f.status === "uploading" && (
-                <div className="mt-2 h-1 rounded-full bg-white/15" role="progressbar" aria-valuenow={Math.round(f.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-                  <div className="h-1 rounded-full bg-accent" style={{ width: `${f.progress * 100}%` }} />
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15" role="progressbar" aria-label={`Uploading ${f.file.name}`} aria-valuenow={Math.round(f.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out" style={{ width: `${f.progress * 100}%` }} />
                 </div>
               )}
             </li>
           ))}
-        </ul>
+        </GlassPanel>
       )}
       {done && (
         <div className="mt-5 flex items-center gap-3">
-          <Link to="/" className="btn btn-accent">{added ? `View ${added} new ${added === 1 ? "track" : "tracks"}` : "Back to library"}</Link>
-          <button className="btn glass" onClick={() => setFiles([])}>Clear list</button>
+          <Button as={Link} to="/" variant="accent">{added ? `View ${added} new ${added === 1 ? "track" : "tracks"}` : "Back to library"}</Button>
+          <Button onClick={() => setFiles([])}>Clear list</Button>
         </div>
       )}
     </>
