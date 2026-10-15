@@ -44,7 +44,7 @@ function ChangePassword() {
     <form onSubmit={submit} className="glass space-y-3 rounded-card p-5">
       <h2 className="text-lg font-medium">Change password</h2>
       <input className="field" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="Current password" autoComplete="current-password" aria-label="Current password" required />
-      <input className="field" type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="New password (8+ characters)" autoComplete="new-password" aria-label="New password" required minLength={8} />
+      <input className="field" type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="New password (5+ characters)" autoComplete="new-password" aria-label="New password" required minLength={5} />
       {msg && <p role={msg.ok ? "status" : "alert"} className={`text-[15px] ${msg.ok ? "text-accent" : "text-[#ff8a8a]"}`}>{msg.text}</p>}
       <button className="btn btn-accent">Save password</button>
     </form>
@@ -79,7 +79,7 @@ function Admin() {
       )}
       {target && (
         <form onSubmit={reset} className="mt-4 flex gap-2">
-          <input className="field" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={`New password for ${target.username}`} aria-label={`New password for ${target.username}`} minLength={8} required autoFocus />
+          <input className="field" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={`New password for ${target.username} (5+ chars)`} aria-label={`New password for ${target.username}`} minLength={5} required autoFocus />
           <button className="btn btn-accent">Reset</button>
         </form>
       )}

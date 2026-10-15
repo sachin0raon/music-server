@@ -186,7 +186,7 @@ Updates reach devices on their next open: the app shell is always checked agains
 - Registration is **open**: anyone who can reach the site can create an account (see [Known limits](#known-limits)).
 - No email is collected.
 - Usernames are 3 to 32 characters: letters, numbers, dots, dashes and underscores. They are case-insensitive, so `Sam` and `sam` cannot both exist.
-- Passwords are 8 to 128 characters and are stored hashed (argon2).
+- Passwords are 5 to 128 characters and are stored hashed (argon2).
 - New accounts are never admins.
 
 ### Making a user an admin

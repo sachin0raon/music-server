@@ -23,8 +23,8 @@ from .tracks import ALLOWED_EXT, _process
 # ---------- reset-password ----------
 
 def reset_password(username: str) -> int:
-    pw = getpass.getpass("New password (min 8 chars): ")
-    if len(pw) < 8:
+    pw = getpass.getpass("New password (min 5 chars): ")
+    if len(pw) < 5:
         print("Password too short.")
         return 1
     if pw != getpass.getpass("Repeat password: "):

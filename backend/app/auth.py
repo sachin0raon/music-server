@@ -35,7 +35,7 @@ def _ip(request: Request) -> str:
 
 class Credentials(BaseModel):
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=5, max_length=128)
 
 
 class LoginBody(BaseModel):
@@ -45,11 +45,11 @@ class LoginBody(BaseModel):
 
 class ChangePasswordBody(BaseModel):
     current_password: str = Field(max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=5, max_length=128)
 
 
 class ResetPasswordBody(BaseModel):
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=5, max_length=128)
 
 
 def user_out(user: User) -> dict:
