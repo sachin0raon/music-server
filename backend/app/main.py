@@ -10,6 +10,7 @@ from .db import engine
 from .auth import admin_router, router as auth_router
 from .models import Base
 from .playlists import router as playlists_router
+from .schema import ensure_columns
 from .tracks import router as tracks_router
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -44,6 +45,8 @@ app.include_router(playlists_router)
 
 @app.on_event("startup")
 def prepare_storage() -> None:
+    # New model columns are added to existing tables here, so updates never need a manual step
+    ensure_columns(engine)
     # Creates any missing tables; existing tables and data are left untouched
     Base.metadata.create_all(engine)
     (settings.data_dir / "users").mkdir(parents=True, exist_ok=True)

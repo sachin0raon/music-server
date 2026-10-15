@@ -8,7 +8,7 @@ import { Button, IconButton } from "./Button";
 import PlayerControls from "./PlayerControls";
 import SeekBar from "./SeekBar";
 import { api, fmt } from "../api";
-import { useData, usePlayer } from "../state";
+import { useData, useFetch, usePlayer } from "../state";
 
 export default function NowPlaying() {
   const { track, queue, index, next, setOpen, patchTrack } = usePlayer();
@@ -18,6 +18,8 @@ export default function NowPlaying() {
   const [menu, setMenu] = useState(false);
   const [err, setErr] = useState("");
   const upNext = queue[index + 1];
+  const { data: info } = useFetch(track ? `/api/tracks/${track.id}` : null);
+  const extra = info && info.id === track?.id ? [info.album, info.year, info.genre].filter(Boolean).join(" · ") : "";
   const root = useRef(null);
   useFocusTrap(root);
   useEffect(() => {
@@ -61,6 +63,7 @@ export default function NowPlaying() {
               <div className="min-w-0">
                 <h1 className="truncate text-title font-semibold">{track.title}</h1>
                 <p className="truncate text-body text-mute">{track.artist}</p>
+                {extra && <p className="truncate text-small text-mute">{extra}</p>}
               </div>
               {track.owned ? (
                 <Button onClick={toggleShare} aria-pressed={!!track.is_shared} className="shrink-0">

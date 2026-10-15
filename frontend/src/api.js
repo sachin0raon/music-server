@@ -70,3 +70,27 @@ export const fmt = (s) => {
   const m = Math.floor(s / 60);
   return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 };
+
+// ---- people-friendly metadata formatting (used by TrackDetails and the player) ----
+
+export const fmtSize = (bytes) => {
+  if (!bytes || !isFinite(bytes) || bytes <= 0) return null;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+};
+
+export const fmtBitrate = (bps) => (bps && isFinite(bps) && bps > 0 ? `${Math.round(bps / 1000)} kbps` : null);
+
+export const fmtHz = (hz) => {
+  if (!hz || !isFinite(hz) || hz <= 0) return null;
+  const k = hz / 1000;
+  return `${Number.isInteger(k) ? k : k.toFixed(1)} kHz`;  // 44.1 kHz must not read as 44 kHz
+};
+
+export const fmtChannels = (n) => (n === 1 ? "Mono" : n === 2 ? "Stereo" : n ? `${n} channels` : null);
+
+export const fmtDate = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d) ? null : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+};

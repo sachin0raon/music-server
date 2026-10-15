@@ -29,7 +29,7 @@ CHUNK = 1024 * 1024
 MAX_COVER_BYTES = 8 * 1024 * 1024
 
 
-def track_out(t: Track, me_id: int | None = None, owner: str | None = None) -> dict:
+def track_out(t: Track, me_id: int | None = None, owner: str | None = None, detail: bool = False) -> dict:
     # Never includes file_path or cover_path
     out = {
         "id": t.id, "title": t.title, "artist": t.artist, "album": t.album,
@@ -39,6 +39,13 @@ def track_out(t: Track, me_id: int | None = None, owner: str | None = None) -> d
     if me_id is not None:
         out["owned"] = t.owner_id == me_id
         out["owner"] = owner
+    if detail:  # only the single-track endpoint, so list rows stay light
+        out.update({
+            "bitrate": t.bitrate, "sample_rate": t.sample_rate, "channels": t.channels,
+            "format": t.format, "year": t.year, "genre": t.genre,
+            "track_number": t.track_number, "disc_number": t.disc_number, "composer": t.composer,
+            "file_size": t.file_size,
+        })
     return out
 
 
@@ -104,6 +111,35 @@ def _cover_ext(data: bytes) -> str | None:
     return None  # unknown formats are ignored rather than stored
 
 
+# Friendly codec/container labels; ".ogg" can hide Vorbis or Opus, so it is resolved per file
+FORMATS = {
+    "mp3": "MP3", "flac": "FLAC", "m4a": "AAC (M4A)", "ogg": "Vorbis (OGG)",
+    "opus": "Opus", "wav": "WAV",
+}
+
+
+def _format_label(audio, ext: str) -> str:
+    if ext == ".ogg":  # tell Opus-in-OGG apart from Vorbis-in-OGG
+        name = type(audio).__name__.lower()
+        return "Opus (OGG)" if "opus" in name else "Vorbis (OGG)"
+    return FORMATS.get(ext.lstrip("."), ext.lstrip(".").upper() or None)
+
+
+def _leading_int(value) -> int | None:
+    """Tags hold '3' or '3/12'; take the leading number."""
+    try:
+        return int(str(value).split("/")[0].strip())
+    except (ValueError, IndexError, AttributeError):
+        return None
+
+
+def _year(value) -> int | None:
+    """Tags hold '2020', '2020-05-01' or '2020-05-01T…'; take the first 4-digit year."""
+    text = str(value or "")
+    year = text[:4]
+    return int(year) if year.isdigit() and 1000 <= int(year) <= 3000 else None
+
+
 def _read_meta(path: Path, fallback_title: str) -> dict:
     try:
         audio = mutagen.File(path)
@@ -113,12 +149,22 @@ def _read_meta(path: Path, fallback_title: str) -> dict:
     except mutagen.MutagenError:
         raise ValueError("Not a readable audio file")
     tags = easy.tags if easy is not None and easy.tags is not None else {}
+    info = audio.info
     return {
         "title": (_first(tags, "title") or fallback_title)[:255],
         "artist": (_first(tags, "artist") or "Unknown Artist")[:255],
         "album": (_first(tags, "album") or None),
-        "duration": float(audio.info.length) if getattr(audio.info, "length", None) else None,
+        "duration": float(info.length) if getattr(info, "length", None) else None,
         "cover": _extract_cover(audio),
+        "bitrate": getattr(info, "bitrate", None) or None,  # WAV reports none
+        "sample_rate": getattr(info, "sample_rate", None) or None,
+        "channels": getattr(info, "channels", None) or None,
+        "format": _format_label(audio, path.suffix.lower()),
+        "year": _year(_first(tags, "date")),
+        "genre": (_first(tags, "genre") or None)[:64] if _first(tags, "genre") else None,
+        "track_number": _leading_int(_first(tags, "tracknumber")),
+        "disc_number": _leading_int(_first(tags, "discnumber")),
+        "composer": (_first(tags, "composer") or None)[:255] if _first(tags, "composer") else None,
     }
 
 
@@ -164,6 +210,10 @@ def _process(upload: UploadFile, user: User, db: DbSession) -> dict:
             owner_id=user.id, file_path=rel, original_name=name, file_size=size, content_hash=digest,
             title=meta["title"], artist=meta["artist"], album=meta["album"],
             duration=meta["duration"], cover_path=cover_rel,
+            bitrate=meta["bitrate"], sample_rate=meta["sample_rate"], channels=meta["channels"],
+            format=meta["format"], year=meta["year"], genre=meta["genre"],
+            track_number=meta["track_number"], disc_number=meta["disc_number"],
+            composer=meta["composer"],
         )
         db.add(track)
         db.commit()
@@ -246,7 +296,7 @@ def list_tracks(
 def get_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
     track = get_visible_track(db, user, track_id)
     owner = db.scalar(select(User.username).where(User.id == track.owner_id))
-    return track_out(track, user.id, owner)
+    return track_out(track, user.id, owner, detail=True)
 
 
 @router.get("/{track_id}/stream")

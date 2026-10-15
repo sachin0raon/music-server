@@ -30,6 +30,8 @@ export default function TrackList({ scope, q, empty, featured }) {
               <p className="text-micro font-medium uppercase tracking-wider text-accent">Latest upload</p>
               <h2 className="mt-1.5 truncate text-heading font-semibold sm:text-title">{latest.title}</h2>
               <p className="truncate text-small text-mute sm:text-body">{latest.artist}</p>
+              {/* list responses carry album but not year, so only album is shown here */}
+              {latest.album && <p className="truncate text-small text-mute">{latest.album}</p>}
             </div>
             <Button variant="accent" onClick={() => playTrack(latest, items)} className="self-start"><Play weight="fill" size={16} />Play</Button>
           </div>

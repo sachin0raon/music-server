@@ -58,6 +58,17 @@ class Track(Base):
     duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     cover_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    # Audio metadata, best-effort from the file tags (all nullable; older rows have NULL)
+    bitrate: Mapped[int | None] = mapped_column(Integer, nullable=True)  # bits per second
+    sample_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Hz
+    channels: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    format: Mapped[str | None] = mapped_column(String(32), nullable=True)  # e.g. "MP3", "FLAC", "Opus"
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    genre: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    track_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    disc_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    composer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     is_shared: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     shared_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

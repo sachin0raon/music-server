@@ -358,7 +358,18 @@ Audio is served as the original file with HTTP range support, which is what make
 
 ### Database
 
-Tables (`users`, `sessions`, `tracks`, `playlists`, `playlist_tracks`) are created automatically on startup. There is no migration tool. Existing tables are never changed or dropped.
+Tables (`users`, `sessions`, `tracks`, `playlists`, `playlist_tracks`) are created automatically on startup, and existing tables are never dropped. On startup the app also **adds any column that a newer version introduces** (nullable or with a default), so an update never needs a manual migration step. Renames, type changes, drops and new indexes on existing tables are still manual and are noted with the update that needs them.
+
+Two commands cover the rest:
+
+```bash
+docker compose exec music-server python -m app.cli migrate                    # the same column check, run by hand instead of restarting
+docker compose exec music-server python -m app.cli backfill-tags [--dry-run]  # re-read file tags for tracks already in the library
+```
+
+`backfill-tags` fills the audio metadata columns (bitrate, sample rate, channels, format, year, genre, track and disc number, composer) for existing rows. It only fills empty values, so it is safe to re-run; `--force` overwrites existing values too. New uploads and imports get this metadata automatically, so the command is only needed once after updating a library that was added before that metadata was stored.
+
+If adding a column fails — the database user lacks `ALTER` rights, for example — startup stops with the column name and the reason instead of running with an out-of-date schema. Grant `ALTER` on the database and start again.
 
 ### Caching and headers
 
@@ -416,7 +427,7 @@ All endpoints except register, login and health need a signed-in session. Intera
 | `POST /api/admin/users/{id}/reset-password` | Reset a password (admin) |
 | `POST /api/tracks` | Upload one or more files (form field `files`) |
 | `GET /api/tracks?scope=mine\|shared\|all&q=&limit=&offset=` | List and search |
-| `GET /api/tracks/{id}` | Track details |
+| `GET /api/tracks/{id}` | Track details, including audio metadata (bitrate, sample rate, channels, format, year, genre, track and disc number, composer, file size) |
 | `GET /api/tracks/{id}/stream` | Audio, with range support |
 | `GET /api/tracks/{id}/cover` | Cover art |
 | `PUT /api/tracks/{id}/share` with `{"shared": true\|false}` | Share or unshare (owner) |
@@ -443,7 +454,7 @@ Either one alone is not enough: the database lists the tracks, and the folder ho
 docker compose up -d --build
 ```
 
-New tables are created automatically. Because there is no migration tool, a future change that alters an existing table would need a manual step, which would be noted with that update.
+New tables and columns are created automatically on startup, so restarting is all an update needs. If the release notes mention new metadata read from your files, run `backfill-tags` once (see Database above).
 
 ---
 

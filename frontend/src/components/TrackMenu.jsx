@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Check, ListPlus, MinusCircle, ShareNetwork, Trash } from "@phosphor-icons/react";
+import { Check, Info, ListPlus, MinusCircle, ShareNetwork, Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
 import Field from "./Field";
 import { Button } from "./Button";
+import TrackDetailsLoader from "./TrackDetails";
 import { api } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
 
-function Item({ icon: Icon, children, onClick, danger, disabled }) {
+function Item({ icon: Icon, children, onClick, danger, disabled, label }) {
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={onClick} disabled={disabled} aria-label={label}
       className={`interactive flex min-h-12 w-full items-center gap-3.5 rounded-tile px-2 text-left text-body disabled:opacity-50 ${danger ? "text-danger" : ""}`}>
       <Icon size={22} className={danger ? "" : "text-mute"} />{children}
     </button>
@@ -73,9 +74,10 @@ export default function TrackMenu({ track, onClose, playlistId }) {
   const removeFromPlaylist = () => run(() => api.del(`/api/playlists/${playlistId}/tracks/${track.id}`));
 
   return (
-    <Sheet title={track.title} onClose={onClose}>
+    <Sheet title={view === "details" ? "Track details" : track.title} onClose={onClose}>
       {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
       {view === "playlists" && <PlaylistPicker track={track} onDone={onClose} />}
+      {view === "details" && <TrackDetailsLoader trackId={track.id} />}
       {view === "confirm" && (
         <div>
           <p className="text-body text-mute">
@@ -89,6 +91,7 @@ export default function TrackMenu({ track, onClose, playlistId }) {
       )}
       {view === "actions" && (
         <div>
+          <Item icon={Info} onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
           <Item icon={ListPlus} onClick={() => setView("playlists")}>Add to playlist</Item>
           {playlistId && <Item icon={MinusCircle} onClick={removeFromPlaylist} disabled={busy}>Remove from this playlist</Item>}
           {track.owned && <Item icon={ShareNetwork} onClick={toggleShare} disabled={busy}>{track.is_shared ? "Stop sharing" : "Share with everyone"}</Item>}
