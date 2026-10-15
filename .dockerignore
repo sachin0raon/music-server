@@ -1,0 +1,66 @@
+# Version Control
+.git
+.gitignore
+
+# Environment & Secret Files
+.env
+.env.*
+*.pem
+*.key
+
+# Application Runtime Data & Music Library
+data/
+music/
+
+# Database Files
+*.sqlite
+*.sqlite3
+*.db
+
+# Node & Frontend Dependencies & Build Output
+**/node_modules
+**/node_modules/
+frontend/dist
+dist/
+dist-ssr/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python Bytecode, Caches & Virtual Environments
+**/__pycache__
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+.venv/
+venv/
+env/
+**/.venv
+**/venv
+**/env
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+# Documentation & Repository Meta
+docs/
+README.md
+CLAUDE.md
+docker-compose*.yml
+
+# IDEs & Editor Files
+.idea/
+.vscode/
+*.swp
+*~
+
+# Operating System Files
+**/.DS_Store
+**/Thumbs.db
+
+# Logs & Temporary Files
+*.log
+logs/
+temp/
+tmp/

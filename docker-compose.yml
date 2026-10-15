@@ -1,0 +1,28 @@
+services:
+  music-server:
+    build: .
+    container_name: music-server
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    ports:
+      - "8000:8000"          # Point reverse proxy (e.g. Nginx Proxy Manager) at <host-ip>:8000
+      # If reverse proxy is on the same machine, bind to localhost to prevent bypassing rate limits:
+      # - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data         # Audio files: users/<id>/ private files, shared/ shared files
+      # Optional: an existing music folder to import from (read-only, never modified)
+      # - /path/to/your/music:/music:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # lets MYSQL_HOST=host.docker.internal reach MySQL on the Docker host
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
