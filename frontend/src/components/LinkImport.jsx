@@ -34,7 +34,7 @@ export default function LinkImport() {
   return (
     <GlassPanel className="mt-5 p-5 sm:p-6">
       <p className="text-heading font-semibold">Add from a link</p>
-      <p className="mt-1 text-body text-mute">
+      <p className="mt-1 max-w-[68ch] text-body text-mute">
         Paste a direct link to an audio file. The server downloads it and adds it to your library.
         mp3, flac, m4a, ogg, opus and wav.
       </p>

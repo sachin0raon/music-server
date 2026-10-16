@@ -5,7 +5,7 @@ import { Play, Playlist } from "@phosphor-icons/react";
 import TrackRow from "../components/TrackRow";
 import TrackMenu from "../components/TrackMenu";
 import PageHeader, { BackLink } from "../components/PageHeader";
-import PlaylistTile from "../components/PlaylistTile";
+import { PlaylistArt } from "../components/PlaylistTile";
 import GlassPanel from "../components/GlassPanel";
 import Field from "../components/Field";
 import { Button } from "../components/Button";
@@ -41,8 +41,8 @@ export function PlaylistsIndex() {
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
           {data.map((p) => (
             <li key={p.id}>
-              <Link to={`/playlists/${p.id}`} className="glass interactive block rounded-card p-3 transition-transform duration-200 ease-out hover:-translate-y-0.5">
-                <PlaylistTile id={p.id} className="aspect-square w-full" />
+              <Link to={`/playlists/${p.id}`} className="glass interactive block rounded-card p-3 transition-transform duration-[220ms] ease-out hover:-translate-y-0.5">
+                <PlaylistArt id={p.id} className="aspect-square w-full" />
                 <span className="mt-3 block truncate text-body font-medium">{p.name}</span>
                 <span className="block text-small text-mute">{p.track_count} {p.track_count === 1 ? "track" : "tracks"}</span>
               </Link>
@@ -129,7 +129,7 @@ export function PlaylistDetail() {
       {loading ? <Skeleton rows={4} /> : error ? <ErrorBox message={error} onRetry={reload} /> : (
         <>
           <div className="mb-5 flex items-end gap-4 sm:gap-6">
-            <PlaylistTile id={id} rounded="rounded-card" className="h-28 w-28 shadow-float sm:h-40 sm:w-40" />
+            <PlaylistArt id={id} tracks={order} rounded="rounded-card" className="h-28 w-28 shadow-float sm:h-40 sm:w-40" />
             <div className="min-w-0 pb-1">
               <p className="text-micro font-medium uppercase tracking-wider text-mute">Playlist</p>
               <h1 className="truncate text-title font-semibold sm:text-display">{data.name}</h1>

@@ -97,7 +97,7 @@ UPDATE users SET is_admin = 1 WHERE username = 'admin';
 
 **Option B: Via CLI (in Docker)**
 ```bash
-docker compose exec music-server python -m app.cli make-admin admin
+docker compose exec -u app music-server python -m app.cli make-admin admin
 ```
 *(For local development outside Docker, run `python -m app.cli make-admin admin` inside `backend/`)*
 
@@ -131,6 +131,52 @@ All settings are environment variables, normally set in `.env`.
 | `STATIC_DIR` | `/app/static` | The built web app. You normally never change this |
 
 The compose file publishes port **8000** and mounts `./data` to `/data`.
+
+### Permissions and the data folder
+
+The container runs as an unprivileged user (uid/gid **1000**), not as root. On every start, if `/data` is not already owned by that user, it is chowned once — this covers a fresh `./data` folder that Docker created as root, and an upgrade from an older image. Files the app writes are therefore owned by uid `1000` on the host, the usual first user on a Linux host.
+
+Because the entrypoint drops privileges only for the main process, `docker compose exec` starts a command as root. A CLI command that writes into `/data` (for example `import`) would leave root-owned files. Run such commands with `-u app`:
+
+```bash
+docker compose exec -u app music-server python -m app.cli import YOUR_USERNAME /music
+```
+
+### Running without Compose
+
+Build the image, then run it. `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` and `SECRET_KEY` are required; the rest have defaults (see the table above).
+
+```bash
+docker build -t music-server .
+
+docker run -d --name music-server \
+  --restart unless-stopped \
+  --init \
+  --add-host host.docker.internal:host-gateway \
+  -p 8000:8000 \
+  -e MYSQL_HOST=host.docker.internal \
+  -e MYSQL_PORT=3306 \
+  -e MYSQL_USER=musicapp \
+  -e MYSQL_PASSWORD=your-password \
+  -e MYSQL_DATABASE=musicapp \
+  -e SECRET_KEY="$(openssl rand -hex 32)" \
+  -e COOKIE_SECURE=false \
+  -v "$PWD/data:/data" \
+  music-server
+```
+
+`--add-host host.docker.internal:host-gateway` is what lets `MYSQL_HOST=host.docker.internal` reach MySQL on the Docker host (the compose file sets the same mapping). Drop `-e COOKIE_SECURE=false` once you are behind HTTPS. To browse an existing music folder, add a read-only mount and point `MUSIC_DIR` at it:
+
+```bash
+  -e MUSIC_DIR=/music \
+  -v /path/to/your/music:/music:ro
+```
+
+Run a CLI command the same way as compose, with `-u app`:
+
+```bash
+docker exec -u app music-server python -m app.cli make-admin admin
+```
 
 ---
 
@@ -207,7 +253,7 @@ UPDATE users SET is_admin = 1 WHERE username = 'USERNAME';
 From the host machine running Docker Compose:
 
 ```bash
-docker compose exec music-server python -m app.cli make-admin USERNAME
+docker compose exec -u app music-server python -m app.cli make-admin USERNAME
 ```
 
 *(Or locally outside Docker: `python -m app.cli make-admin USERNAME` inside `backend/`)*
@@ -240,7 +286,7 @@ With no email there is no "forgot password" link. Instead:
 - **From the command line**, for example if the admin is locked out:
 
 ```bash
-docker compose exec music-server python -m app.cli reset-password USERNAME
+docker compose exec -u app music-server python -m app.cli reset-password USERNAME
 ```
 
 ### What admins can and cannot do
@@ -332,8 +378,8 @@ Handy for very large folders, or to import without opening the app:
 3. Preview, then import:
 
    ```bash
-   docker compose exec music-server python -m app.cli import YOUR_USERNAME /music --dry-run
-   docker compose exec music-server python -m app.cli import YOUR_USERNAME /music
+   docker compose exec -u app music-server python -m app.cli import YOUR_USERNAME /music --dry-run
+   docker compose exec -u app music-server python -m app.cli import YOUR_USERNAME /music
    ```
 
 How it behaves:
@@ -381,8 +427,8 @@ Tables (`users`, `sessions`, `tracks`, `playlists`, `playlist_tracks`) are creat
 Two commands cover the rest:
 
 ```bash
-docker compose exec music-server python -m app.cli migrate                    # the same column check, run by hand instead of restarting
-docker compose exec music-server python -m app.cli backfill-tags [--dry-run]  # re-read file tags for tracks already in the library
+docker compose exec -u app music-server python -m app.cli migrate                    # the same column check, run by hand instead of restarting
+docker compose exec -u app music-server python -m app.cli backfill-tags [--dry-run]  # re-read file tags for tracks already in the library
 ```
 
 `backfill-tags` fills the audio metadata columns (bitrate, sample rate, channels, format, year, genre, track and disc number, composer) for existing rows. It only fills empty values, so it is safe to re-run; `--force` overwrites existing values too. New uploads and imports get this metadata automatically, so the command is only needed once after updating a library that was added before that metadata was stored.

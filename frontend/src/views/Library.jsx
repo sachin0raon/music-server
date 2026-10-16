@@ -35,9 +35,10 @@ export default function Library() {
         subtitle={total > 0 ? `${total} ${isFolder ? (total === 1 ? "file" : "files") : (total === 1 ? "track" : "tracks")}` : undefined}
         actions={<IconButton as={Link} to="/upload" label="Upload music" variant="glass"><Plus size={20} /></IconButton>} />
       {/* On phones the tabs take the full width (three labels must not wrap) and the
-          sort control drops to its own line; from sm up they share one row again. */}
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Tabs label="Library" tabs={folderOk ? [...TABS, FOLDER_TAB] : TABS} value={tab} className="w-full sm:min-w-0 sm:flex-1"
+          sort control drops to its own line. From sm up the tabs size to their labels
+          and the sort sits at the far end of the same row. */}
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs label="Library" tabs={folderOk ? [...TABS, FOLDER_TAB] : TABS} value={tab} className="w-full sm:w-auto"
           onChange={(id) => update("tab", id, "mine")} />
         <SortSelect value={sort} onChange={(v) => update("sort", v, DEFAULT_SORT)} className="self-end sm:self-auto" />
       </div>

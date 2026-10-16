@@ -18,7 +18,7 @@ export default function Tabs({ tabs, value, onChange, label, className = "" }) {
         const on = id === value;
         return (
           <button key={id} ref={(el) => { refs.current[i] = el; }} type="button" role="tab" aria-selected={on} tabIndex={on ? 0 : -1} onClick={() => onChange(id)}
-            className={`min-h-11 flex-1 whitespace-nowrap rounded-full px-1.5 text-small font-medium transition-colors duration-150 sm:px-3 sm:text-[15px] ${on ? "bg-white/15 text-ink shadow-rest" : "text-mute hover:text-ink"}`}>
+            className={`min-h-11 flex-1 whitespace-nowrap rounded-full px-1.5 text-small font-medium transition-colors duration-[160ms] sm:flex-none sm:px-5 sm:text-[15px] ${on ? "bg-white/15 text-ink shadow-rest" : "text-mute hover:text-ink"}`}>
             {text}
           </button>
         );

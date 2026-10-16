@@ -84,7 +84,7 @@ export default function FolderScan() {
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><FolderOpen size={22} /></span>
         <div className="min-w-0 flex-1">
           <p className="text-heading font-semibold">Find new music on the server</p>
-          <p className="mt-1 text-body text-mute">
+          <p className="mt-1 max-w-[68ch] text-body text-mute">
             Looks through the server's music folder and lists the songs that are not in your library yet.
             Nothing is copied until you pick the ones you want. Tracks are private to you until you share them.
           </p>
@@ -127,28 +127,29 @@ export default function FolderScan() {
 
       {items?.length > 0 && (
         <>
-          <div className="mt-4 mb-2 flex flex-wrap items-center gap-2">
-            <p className="min-w-0 flex-1 text-small text-mute">
-              Pick the ones you want, or take them all.
-            </p>
-            <Button small onClick={() => (allSelected ? setSelected(new Set()) : setSelected(new Set(items.map((t) => t.id))))}>
-              {allSelected ? "Clear selection" : "Select all"}
-            </Button>
+          <div className="mt-4 mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-small text-mute">Pick the ones you want, or take them all.</p>
+            <div className="flex justify-end">
+              <Button small onClick={() => (allSelected ? setSelected(new Set()) : setSelected(new Set(items.map((t) => t.id))))}>
+                {allSelected ? "Clear selection" : "Select all"}
+              </Button>
+            </div>
           </div>
+          {/* Above the list, not below it: a long list could push the import action under the bottom nav */}
+          {selected.size > 0 && (
+            <GlassPanel className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+              <p className="mr-auto whitespace-nowrap text-small text-mute">{selected.size} selected</p>
+              <Button variant="accent" small onClick={importSelected} disabled={importing}>
+                {importing ? "Importing" : `Import ${selected.size === 1 ? "this song" : `${selected.size} songs`}`}
+              </Button>
+              <Button small onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
+            </GlassPanel>
+          )}
           <GlassPanel as="ul" className="p-2">
             {items.map((t) => (
               <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} />
             ))}
           </GlassPanel>
-          {selected.size > 0 && (
-            <GlassPanel className="mt-4 flex flex-wrap items-center gap-3 p-3">
-              <p className="min-w-0 flex-1 text-small text-mute">{selected.size} selected</p>
-              <Button variant="accent" onClick={importSelected} disabled={importing}>
-                {importing ? "Importing" : `Import ${selected.size === 1 ? "this song" : `${selected.size} songs`}`}
-              </Button>
-              <Button onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
-            </GlassPanel>
-          )}
         </>
       )}
 

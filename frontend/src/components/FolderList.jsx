@@ -103,17 +103,30 @@ export default function FolderList({ sort, onTotal, empty }) {
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <p className="min-w-0 flex-1 text-small text-mute">
-          Playing from the server folder — nothing is copied until you import.
-        </p>
-        {selectable.length > 0 && (
-          <Button small onClick={() => (allSelected ? setSelected(new Set()) : setSelected(new Set(selectable.map((t) => t.id))))}>
-            {allSelected ? "Clear selection" : "Select all"}
-          </Button>
-        )}
-        <IconButton label="Refresh folder" onClick={load} disabled={busy}><ArrowsClockwise size={18} weight="bold" /></IconButton>
+      {/* Helper text gets its own line on phones; the controls sit beneath it, never beside it */}
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-small text-mute">Playing from the server folder. Nothing is copied until you import.</p>
+        <div className="flex items-center justify-end gap-2">
+          {selectable.length > 0 && (
+            <Button small onClick={() => (allSelected ? setSelected(new Set()) : setSelected(new Set(selectable.map((t) => t.id))))}>
+              {allSelected ? "Clear selection" : "Select all"}
+            </Button>
+          )}
+          <IconButton label="Refresh folder" onClick={load} disabled={busy}><ArrowsClockwise size={18} weight="bold" /></IconButton>
+        </div>
       </div>
+
+      {/* The selection bar sits above the list: at the end of a long list it could fall
+          under the bottom navigation on a phone, and the import action would be lost */}
+      {selected.size > 0 && (
+        <GlassPanel className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+          <p className="mr-auto whitespace-nowrap text-small text-mute">{selected.size} selected</p>
+          <Button variant="accent" small onClick={importSelected} disabled={importing}>
+            {importing ? "Importing" : `Import ${selected.size === 1 ? "this song" : `${selected.size} songs`}`}
+          </Button>
+          <Button small onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
+        </GlassPanel>
+      )}
 
       <GlassPanel as="ul" className="p-2">
         {items.map((t) => (
@@ -124,16 +137,6 @@ export default function FolderList({ sort, onTotal, empty }) {
 
       {err && <p role="alert" className="mt-3 text-small text-danger">{err}</p>}
       {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}
-
-      {selected.size > 0 && (
-        <GlassPanel className="mt-4 flex flex-wrap items-center gap-3 p-3">
-          <p className="min-w-0 flex-1 text-small text-mute">{selected.size} selected</p>
-          <Button variant="accent" onClick={importSelected} disabled={importing}>
-            {importing ? "Importing" : `Import ${selected.size === 1 ? "this file" : `${selected.size} files`}`}
-          </Button>
-          <Button onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
-        </GlassPanel>
-      )}
 
       {results && <ImportResults items={results} />}
     </>

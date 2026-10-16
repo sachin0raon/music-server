@@ -19,11 +19,11 @@ export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 
   const eq = active && playing;
   const isFolder = track.source === "folder";
   return (
-    <li ref={rowRef} className={`group relative flex items-center gap-1 rounded-tile pr-1 transition-colors duration-150 ${active ? "bg-accent-soft" : selected ? "bg-white/[0.07]" : "hover:bg-white/[0.06] focus-within:bg-white/[0.06]"}`}>
+    <li ref={rowRef} className={`group relative flex items-center gap-1 rounded-tile pr-1 transition-colors duration-[160ms] ${active ? "bg-accent-soft" : selected ? "bg-white/[0.07]" : "hover:bg-white/[0.06] focus-within:bg-white/[0.06]"}`}>
       {selectable && (
         <button type="button" role="checkbox" aria-checked={selected} aria-label={`Select ${track.title}`}
           onClick={() => onSelect?.(track)} className="grid min-h-[64px] place-items-center pl-3 pr-1">
-          <span className={`grid h-[22px] w-[22px] place-items-center rounded-md border transition-colors duration-150 ${selected ? "border-accent bg-accent text-accent-ink" : "border-line-strong bg-white/[0.04] group-hover:border-white/30"}`}>
+          <span className={`grid h-[22px] w-[22px] place-items-center rounded-md border transition-colors duration-[160ms] ${selected ? "border-accent bg-accent text-accent-ink" : "border-line-strong bg-white/[0.04] group-hover:border-white/30"}`}>
             {selected && <Check size={14} weight="bold" />}
           </span>
         </button>
@@ -31,9 +31,9 @@ export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 
       <button onClick={() => playTrack(track, list, source)} aria-label={`Play ${track.title} by ${track.artist}`} aria-current={active ? "true" : undefined}
         className={`flex min-h-[64px] min-w-0 flex-1 items-center gap-3.5 rounded-tile text-left ${selectable ? "pl-1.5" : "pl-2"}`}>
         {/* The scale sits on the wrapper, not the Cover, so the hover overlay grows with the image instead of leaving a ring of un-darkened cover around it */}
-      <span className="relative shrink-0 transition-transform duration-200 ease-out group-hover:scale-[1.04]">
+      <span className="relative shrink-0 transition-transform duration-[220ms] ease-out group-hover:scale-[1.04]">
           <Cover track={track} className="h-12 w-12" />
-          <span className={`absolute inset-0 grid place-items-center rounded-xl bg-black/55 text-ink transition-opacity duration-150 ${eq ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
+          <span className={`absolute inset-0 grid place-items-center rounded-xl bg-black/55 text-ink transition-opacity duration-[160ms] ${eq ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
             {eq ? <EqBars /> : <Play size={18} weight="fill" />}
           </span>
         </span>

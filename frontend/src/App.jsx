@@ -49,7 +49,7 @@ function Shell() {
         </div>
         <nav aria-label="Sidebar" className="flex flex-col gap-1">
           {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => `relative flex min-h-11 items-center gap-3 rounded-full px-3 text-body transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink ${isActive ? "bg-white/10 font-medium text-ink" : "text-mute"}`}>
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => `relative flex min-h-11 items-center gap-3 rounded-full px-3 text-body transition-colors duration-[160ms] hover:bg-white/[0.06] hover:text-ink ${isActive ? "bg-white/10 font-medium text-ink" : "text-mute"}`}>
               {({ isActive }) => <>
                 {isActive && <span aria-hidden="true" className="absolute -left-2 h-5 w-[3px] rounded-full bg-accent" />}
                 <Icon size={22} weight={isActive ? "fill" : "regular"} className={isActive ? "text-accent" : ""} />{label}
@@ -78,9 +78,9 @@ function Shell() {
       <PlayerBar />
       <nav aria-label="Main" className="glass-raised fixed inset-x-0 bottom-0 z-30 flex justify-around rounded-none border-x-0 border-b-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden">
         {NAV.map(({ to, label, icon: Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-micro font-medium transition-colors duration-150 ${isActive ? "text-ink" : "text-mute"}`}>
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-micro font-medium transition-colors duration-[160ms] ${isActive ? "text-ink" : "text-mute"}`}>
             {({ isActive }) => <>
-              <span className={`grid h-8 w-14 place-items-center rounded-full transition-colors duration-200 ${isActive ? "bg-accent-soft text-accent" : ""}`}><Icon size={24} weight={isActive ? "fill" : "regular"} /></span>
+              <span className={`grid h-8 w-14 place-items-center rounded-full transition-colors duration-[220ms] ${isActive ? "bg-accent-soft text-accent" : ""}`}><Icon size={24} weight={isActive ? "fill" : "regular"} /></span>
               {label}
             </>}
           </NavLink>

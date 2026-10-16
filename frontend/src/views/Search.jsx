@@ -23,7 +23,7 @@ export default function Search() {
           <TrackList scope="all" q={q} sort={sort} empty={<Empty title="No matches" icon={MagnifyingGlass}>Nothing in your library or shared with you matches “{q}”. Try fewer words.</Empty>} />
         </>
       ) : (
-        <Empty title="Find something to play" icon={MagnifyingGlass}>Search your library and everything shared with you.</Empty>
+        <Empty compact title="Find something to play" icon={MagnifyingGlass}>Search your library and everything shared with you.</Empty>
       )}
     </>
   );

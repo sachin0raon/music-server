@@ -46,7 +46,7 @@ export default function Upload() {
       <PageHeader title="Upload" back={{ to: "/", label: "Library" }} className="mb-4" />
       <GlassPanel onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); add(e.dataTransfer.files); }}
-        className={`flex flex-col items-start border-dashed p-6 text-left transition-colors duration-200 sm:p-8 ${over ? "!border-accent !bg-accent-soft" : ""}`}>
+        className={`flex flex-col items-start border-dashed p-6 text-left transition-colors duration-[220ms] sm:p-8 ${over ? "!border-accent !bg-accent-soft" : ""}`}>
         <span className="grid h-14 w-14 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><UploadSimple size={28} /></span>
         <p className="mt-4 text-heading font-semibold">Add music to your library</p>
         <p className="mt-1 max-w-[52ch] text-body text-mute">Drop files here or choose them. mp3, flac, m4a, ogg, opus and wav. Uploads are private until you share them.</p>
@@ -72,7 +72,7 @@ export default function Upload() {
               </p>
               {f.status === "uploading" && (
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15" role="progressbar" aria-label={`Uploading ${f.file.name}`} aria-valuenow={Math.round(f.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-                  <div className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out" style={{ width: `${f.progress * 100}%` }} />
+                  <div className="h-full rounded-full bg-accent transition-[width] duration-[220ms] ease-out" style={{ width: `${f.progress * 100}%` }} />
                 </div>
               )}
             </li>

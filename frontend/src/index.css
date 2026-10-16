@@ -5,12 +5,12 @@
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 
   /* Surfaces */
-  --color-ground: #07080a;
+  --color-ground: #06070a;
   --color-surface-1: #0f1114;
-  --color-surface-2: #16191e;
-  --color-surface-3: #1e222a;
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-strong: rgba(255, 255, 255, 0.16);
+  --color-surface-2: #14171d;
+  --color-surface-3: #1c2028;
+  --color-line: rgba(255, 255, 255, 0.07);
+  --color-line-strong: rgba(255, 255, 255, 0.13);
 
   /* Text (all AA on ground and surfaces) */
   --color-ink: #f4f5f7;
@@ -32,12 +32,12 @@
   --color-glow-a: #1e4f5c;
   --color-glow-b: #26407a;
 
-  /* Type scale. One notch tighter than before so a wide screen does not read as
-     "zoomed in": page titles 36px, secondary titles 26px. Body stays 16px. */
-  --text-display: 2.25rem;
+  /* Type scale. Page titles 34px, secondary titles 28px. Body stays 16px: it is the
+     floor iOS needs in inputs to avoid zoom, and it is what mobile reads comfortably. */
+  --text-display: 2.125rem;
   --text-display--line-height: 1.15;
   --text-display--letter-spacing: -0.03em;
-  --text-title: 1.625rem;
+  --text-title: 1.75rem;
   --text-title--line-height: 1.25;
   --text-title--letter-spacing: -0.02em;
   --text-heading: 1.25rem;
@@ -51,21 +51,21 @@
   --text-micro--line-height: 1.4;
 
   /* Radii */
-  --radius-card: 24px;
-  --radius-tile: 16px;
-  --radius-control: 12px;
+  --radius-card: 28px;
+  --radius-tile: 18px;
+  --radius-control: 14px;
 
   /* Elevation */
-  --shadow-rest: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.18);
-  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 28px rgba(0, 0, 0, 0.32);
-  --shadow-float: 0 8px 16px rgba(0, 0, 0, 0.35), 0 28px 60px rgba(0, 0, 0, 0.5);
+  --shadow-rest: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 16px rgba(0, 0, 0, 0.22);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.35), 0 18px 40px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 10px 24px rgba(0, 0, 0, 0.4), 0 40px 80px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 0 40px rgba(138, 180, 255, 0.28);
 
   /* Motion */
   --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 150ms;
-  --duration-base: 200ms;
-  --duration-slow: 250ms;
+  --duration-fast: 160ms;
+  --duration-base: 220ms;
+  --duration-slow: 280ms;
 }
 
 html { color-scheme: dark; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
@@ -81,8 +81,13 @@ body {
   overscroll-behavior-y: none;
 }
 ::selection { background: var(--color-accent-soft); color: var(--color-ink); }
-:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: inherit; }
 .tnum { font-variant-numeric: tabular-nums; }
+
+/* Base layer, so component rules (e.g. .field's soft ring) can override it. Do not
+   set border-radius here: the ring follows each element's own corners. */
+@layer base {
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+}
 
 @layer components {
 /* ---------- Glass levels ----------
@@ -96,15 +101,15 @@ body {
 }
 .glass-raised {
   background: rgba(22, 25, 30, 0.72);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
   border: 1px solid var(--color-line-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), var(--shadow-lift);
 }
 .glass-overlay {
   background: rgba(18, 20, 25, 0.92);
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(34px) saturate(150%);
+  -webkit-backdrop-filter: blur(34px) saturate(150%);
   border: 1px solid var(--color-line-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), var(--shadow-float);
 }
@@ -160,25 +165,26 @@ body {
 }
 
 /* ---------- Seek slider ----------
-   --p is the filled percentage, set inline by the player. The thumb is
-   hidden at rest and appears on hover/focus/touch. */
-input[type="range"].seek { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer; }
+   --p is the filled percentage, set inline by the player. */
+/* The handle is always visible (Direction A): a bar that hides its thumb reads as
+   a hairline. The track is 5px and thickens on hover; touch gets a 44px hit area. */
+input[type="range"].seek { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; background: transparent; cursor: pointer; }
 input[type="range"].seek:focus-visible { outline: none; }
-input[type="range"].seek::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--color-accent) var(--p), rgba(255, 255, 255, 0.18) var(--p)); transition: height var(--duration-fast) var(--ease-smooth); }
-input[type="range"].seek::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); }
-input[type="range"].seek::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--color-accent); }
-input[type="range"].seek::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--color-ink); border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transform: scale(0); transition: transform var(--duration-fast) var(--ease-smooth); }
-input[type="range"].seek::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--color-ink); border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transform: scale(0); transition: transform var(--duration-fast) var(--ease-smooth); }
+input[type="range"].seek::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--color-accent) var(--p), rgba(255, 255, 255, 0.18) var(--p)); transition: height var(--duration-fast) var(--ease-smooth); }
+input[type="range"].seek::-moz-range-track { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.18); }
+input[type="range"].seek::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--color-accent); }
+input[type="range"].seek::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4.5px; border-radius: 50%; background: var(--color-ink); border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: transform var(--duration-fast) var(--ease-smooth); }
+input[type="range"].seek::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--color-ink); border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: transform var(--duration-fast) var(--ease-smooth); }
 input[type="range"].seek:hover::-webkit-slider-runnable-track { height: 6px; }
-input[type="range"].seek:hover::-webkit-slider-thumb, input[type="range"].seek:focus-visible::-webkit-slider-thumb, input[type="range"].seek:active::-webkit-slider-thumb { transform: scale(1); }
-input[type="range"].seek:hover::-moz-range-thumb, input[type="range"].seek:focus-visible::-moz-range-thumb, input[type="range"].seek:active::-moz-range-thumb { transform: scale(1); }
+input[type="range"].seek:hover::-webkit-slider-thumb, input[type="range"].seek:active::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"].seek:hover::-moz-range-thumb, input[type="range"].seek:active::-moz-range-thumb { transform: scale(1.15); }
 input[type="range"].seek:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--color-accent-soft), 0 0 0 5px var(--color-accent); }
 input[type="range"].seek:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--color-accent-soft), 0 0 0 5px var(--color-accent); }
 
-/* Bigger seek handle for fingers, always visible */
 @media (pointer: coarse) {
-  input[type="range"].seek::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; transform: scale(1); }
-  input[type="range"].seek::-moz-range-thumb { width: 20px; height: 20px; transform: scale(1); }
+  input[type="range"].seek { height: 44px; }
+  input[type="range"].seek::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -7.5px; }
+  input[type="range"].seek::-moz-range-thumb { width: 20px; height: 20px; }
 }
 
 /* ---------- Skeleton shimmer ---------- */

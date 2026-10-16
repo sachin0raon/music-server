@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeSlash } from "@phosphor-icons/react";
+import { Eye, EyeSlash, MusicNotes } from "@phosphor-icons/react";
 import GlassPanel from "../components/GlassPanel";
 import Tabs from "../components/Tabs";
 import Field from "../components/Field";
@@ -55,13 +55,17 @@ export default function Auth() {
         <div className="absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-glow-a opacity-70 blur-[90px]" />
         <div className="absolute -right-32 bottom-10 h-[320px] w-[320px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
       </div>
-      <main className="relative mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-[max(1.25rem,env(safe-area-inset-left))] py-10">
-        <h1 className="text-display font-semibold">{isLogin ? "Sign in" : "Create account"}</h1>
-        <p className="mt-3 text-body text-mute">
-          {isLogin ? "Your library and everything shared with you." : "Pick a username and password. No email needed."}
-        </p>
+      {/* Phones: one column. Desktop: the intro sits beside the form instead of floating above it. */}
+      <main className="relative mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-7 px-[max(1.25rem,env(safe-area-inset-left))] py-10 lg:max-w-4xl lg:grid lg:grid-cols-2 lg:items-center lg:gap-16">
+        <div>
+          <span className="mb-6 grid h-12 w-12 place-items-center rounded-tile bg-accent text-accent-ink shadow-glow"><MusicNotes size={24} weight="fill" /></span>
+          <h1 className="text-display font-semibold">{isLogin ? "Sign in" : "Create account"}</h1>
+          <p className="mt-3 max-w-[36ch] text-body text-mute">
+            {isLogin ? "Your library and everything shared with you." : "Pick a username and password. No email needed."}
+          </p>
+        </div>
 
-        <GlassPanel level="raised" className="mt-7 p-5 shadow-float">
+        <GlassPanel level="raised" className="p-5 shadow-float">
           <Tabs label="Authentication mode" tabs={[["login", "Sign in"], ["register", "Create account"]]} value={mode} onChange={switchTab} className="mb-5" />
 
           <form onSubmit={submit} className="space-y-4">
@@ -89,14 +93,6 @@ export default function Auth() {
             </Button>
           </form>
         </GlassPanel>
-
-        <button
-          type="button"
-          onClick={() => switchTab(isLogin ? "register" : "login")}
-          className="mt-5 self-start rounded text-body text-mute underline underline-offset-4 transition-colors duration-150 hover:text-ink"
-        >
-          {isLogin ? "Need an account? Create one" : "Already have an account? Sign in"}
-        </button>
       </main>
     </div>
   );

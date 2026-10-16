@@ -8,15 +8,15 @@ export function Skeleton({ rows = 6, featured = false }) {
   return (
     <div>
       {featured && (
-        <GlassPanel className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-5" aria-hidden="true">
-          <div className="shimmer h-[122px] w-[122px] shrink-0 rounded-2xl sm:h-40 sm:w-40" />
-          <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
+        <GlassPanel className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6" aria-hidden="true">
+          <div className="shimmer h-[122px] w-[122px] shrink-0 rounded-2xl sm:h-[184px] sm:w-[184px]" />
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center sm:gap-8 sm:py-0">
             <div className="space-y-3">
               <div className="shimmer h-3 w-24 rounded" />
               <div className="shimmer h-5 w-2/3 rounded" />
               <div className="shimmer h-3.5 w-1/3 rounded" />
             </div>
-            <div className="shimmer h-9 w-24 rounded-full" />
+            <div className="shimmer h-11 w-28 rounded-full self-start sm:self-center" />
           </div>
         </GlassPanel>
       )}
@@ -36,7 +36,21 @@ export function Skeleton({ rows = 6, featured = false }) {
   );
 }
 
-export function Empty({ title, children, action, icon: Icon = MusicNotes }) {
+// `compact`: a shorter panel that sits icon-beside-text from sm up, for places where the
+// full centred block would be a large, mostly empty card on a wide screen
+export function Empty({ title, children, action, icon: Icon = MusicNotes, compact = false }) {
+  if (compact) {
+    return (
+      <GlassPanel className="flex flex-col items-center gap-4 px-6 py-8 text-center sm:flex-row sm:gap-5 sm:px-7 sm:py-6 sm:text-left">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><Icon size={26} weight="duotone" /></span>
+        <div className="min-w-0">
+          <h2 className="text-heading font-semibold">{title}</h2>
+          <p className="mt-1.5 max-w-[46ch] text-body text-mute">{children}</p>
+          {action && <div className="mt-5">{action}</div>}
+        </div>
+      </GlassPanel>
+    );
+  }
   return (
     <GlassPanel className="flex flex-col items-center px-6 py-12 text-center">
       <span className="mb-5 grid h-16 w-16 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><Icon size={30} weight="duotone" /></span>

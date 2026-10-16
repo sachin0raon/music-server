@@ -24,7 +24,7 @@ export default function Cover({ track, className = "", rounded = "rounded-xl", e
       <div className="absolute inset-0 grid place-items-center text-white/45"><MusicNote size="38%" weight="fill" /></div>
       {art && (
         <img src={src} alt="" loading={eager ? "eager" : "lazy"} decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${loaded ? "opacity-100" : "opacity-0"}`} />
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[220ms] ease-out ${loaded ? "opacity-100" : "opacity-0"}`} />
       )}
       <div className={`pointer-events-none absolute inset-0 ${rounded} ring-1 ring-inset ring-white/10`} />
     </div>
