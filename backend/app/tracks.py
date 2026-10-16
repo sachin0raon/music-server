@@ -260,16 +260,27 @@ MEDIA_TYPES = {
 IMAGE_TYPES = {".jpg": "image/jpeg", ".png": "image/png"}
 
 
+SORT_ORDER = {
+    "added_desc": (Track.created_at.desc(), Track.id.desc()),
+    "added_asc": (Track.created_at.asc(), Track.id.asc()),
+    "title_asc": (Track.title.asc(), Track.id.asc()),
+    "title_desc": (Track.title.desc(), Track.id.desc()),
+}
+
+
 @router.get("")
 def list_tracks(
     scope: str = Query("mine", pattern="^(mine|shared|all)$"),
     q: str | None = Query(None, max_length=100),
+    sort: str = Query("added_desc", pattern="^(added_desc|added_asc|title_asc|title_desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ):
-    """mine = your own tracks, shared = everything shared (yours included), all = both."""
+    """mine = your own tracks, shared = everything shared (yours included), all = both.
+    sort is whitelisted, so only the fixed orders above reach ORDER BY. The id tiebreaker
+    keeps paging stable when two tracks share a title or upload time."""
     where = [visible_filter(user)]  # always applied, whatever the scope
     if scope == "mine":
         where.append(Track.owner_id == user.id)
@@ -286,7 +297,7 @@ def list_tracks(
         select(Track, User.username)
         .join(User, User.id == Track.owner_id)
         .where(*where)
-        .order_by(Track.created_at.desc(), Track.id.desc())
+        .order_by(*SORT_ORDER[sort])
         .limit(limit).offset(offset)
     ).all()
     return {"total": total, "items": [track_out(t, user.id, owner) for t, owner in rows]}

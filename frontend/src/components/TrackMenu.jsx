@@ -55,7 +55,7 @@ function PlaylistPicker({ track, onDone }) {
   );
 }
 
-export default function TrackMenu({ track, onClose, playlistId }) {
+export default function TrackMenu({ track, onClose, playlistId, fullScreen = false }) {
   const { bump } = useData();
   const { patchTrack, dropTrack } = usePlayer();
   const [view, setView] = useState("actions");
@@ -74,7 +74,7 @@ export default function TrackMenu({ track, onClose, playlistId }) {
   const removeFromPlaylist = () => run(() => api.del(`/api/playlists/${playlistId}/tracks/${track.id}`));
 
   return (
-    <Sheet title={view === "details" ? "Track details" : track.title} onClose={onClose}>
+    <Sheet title={view === "details" ? "Track details" : track.title} onClose={onClose} fullScreen={fullScreen}>
       {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
       {view === "playlists" && <PlaylistPicker track={track} onDone={onClose} />}
       {view === "details" && <TrackDetailsLoader trackId={track.id} />}

@@ -7,11 +7,12 @@ import TrackMenu from "./TrackMenu";
 import GlassPanel from "./GlassPanel";
 import { Button } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
-import { usePlayer, useTracks } from "../state";
+import { useFetch, usePlayer, useTracks } from "../state";
 
 // Used by Library (scope mine/shared) and Search (scope all + q)
-export default function TrackList({ scope, q, empty, featured, onTotal }) {
-  const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q);
+export default function TrackList({ scope, q, empty, featured, onTotal, sort = "added_desc" }) {
+  const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q, sort);
+  const { data: newest } = useFetch(featured ? `/api/tracks?scope=${scope}&sort=added_desc&limit=1` : null);
   const { playTrack } = usePlayer();
   const [menu, setMenu] = useState(null);
 
@@ -23,7 +24,10 @@ export default function TrackList({ scope, q, empty, featured, onTotal }) {
   if (error && !items.length) return <ErrorBox message={error} onRetry={reload} />;
   if (!items.length) return empty ?? <Empty title="Nothing here yet" />;
 
-  const latest = featured ? items[0] : null;
+  // The card always shows the newest upload, whatever order the list is in
+  const latest = featured ? newest?.items?.[0] ?? null : null;
+  // Play from the card: inside the sorted list when it is there, otherwise just that track
+  const playLatest = () => (items.some((t) => t.id === latest.id) ? playTrack(latest, items) : playTrack(latest, [latest]));
   return (
     <>
       {latest && (
@@ -37,7 +41,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal }) {
               {/* list responses carry album but not year, so only album is shown here */}
               {latest.album && <p className="truncate text-small text-mute">{latest.album}</p>}
             </div>
-            <Button variant="accent" onClick={() => playTrack(latest, items)} className="self-start"><Play weight="fill" size={16} />Play</Button>
+            <Button variant="accent" onClick={playLatest} className="self-start"><Play weight="fill" size={16} />Play</Button>
           </div>
         </GlassPanel>
       )}

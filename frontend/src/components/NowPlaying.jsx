@@ -87,7 +87,7 @@ export default function NowPlaying() {
           </div>
         </div>
       </div>
-      <AnimatePresence>{menu && <TrackMenu key="menu" track={track} onClose={() => setMenu(false)} />}</AnimatePresence>
+      <AnimatePresence>{menu && <TrackMenu key="menu" track={track} fullScreen onClose={() => setMenu(false)} />}</AnimatePresence>
     </motion.div>
   );
 }

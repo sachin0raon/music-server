@@ -2,7 +2,9 @@ import { useEffect, useRef } from "react";
 import useFocusTrap from "./useFocusTrap";
 import { motion, useReducedMotion } from "motion/react";
 
-export default function Sheet({ title, onClose, children }) {
+// fullScreen: the player covers the sidebar, so the sheet centres on the whole screen.
+// Otherwise, on lg+, the sidebar (w-60) stays visible and the sheet centres on the content beside it.
+export default function Sheet({ title, onClose, fullScreen = false, children }) {
   const reduce = useReducedMotion();
   const root = useRef(null);
   useFocusTrap(root);
@@ -12,7 +14,7 @@ export default function Sheet({ title, onClose, children }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <motion.div ref={root} className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}
+    <motion.div ref={root} className={`fixed inset-0 z-50 flex items-end justify-center ${fullScreen ? "" : "lg:pl-60"}`} role="dialog" aria-modal="true" aria-label={title}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
       <motion.div className="glass-overlay relative max-h-[85dvh] w-full max-w-xl overflow-y-auto rounded-t-[28px] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3"

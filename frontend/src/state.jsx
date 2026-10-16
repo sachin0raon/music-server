@@ -49,13 +49,13 @@ export function useFetch(url) {
   return { ...s, reload: () => setTick((t) => t + 1) };
 }
 
-export function useTracks(scope, q = "") {
+export function useTracks(scope, q = "", sort = "added_desc") {
   const { version } = useData();
   const [s, setS] = useState({ items: [], total: 0, loading: true, error: null, busy: false });
   const [tick, setTick] = useState(0);
   const gen = useRef(0); // bumped on every reset, so a late 'Show more' response can be dropped
   const params = (offset) => {
-    const p = new URLSearchParams({ scope, limit: "50", offset: String(offset) });
+    const p = new URLSearchParams({ scope, sort, limit: "50", offset: String(offset) });
     if (q) p.set("q", q);
     return `/api/tracks?${p}`;
   };
@@ -67,7 +67,7 @@ export function useTracks(scope, q = "") {
       .then((d) => live && setS({ items: d.items, total: d.total, loading: false, error: null, busy: false }))
       .catch((e) => live && setS((p) => ({ ...p, loading: false, error: e.message })));
     return () => { live = false; };
-  }, [scope, q, version, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scope, q, sort, version, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadMore = async () => {
     const g = gen.current;
     setS((p) => ({ ...p, busy: true }));

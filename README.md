@@ -429,7 +429,7 @@ All endpoints except register, login and health need a signed-in session. Intera
 | `GET /api/admin/users` | List users (admin) |
 | `POST /api/admin/users/{id}/reset-password` | Reset a password (admin) |
 | `POST /api/tracks` | Upload one or more files (form field `files`) |
-| `GET /api/tracks?scope=mine\|shared\|all&q=&limit=&offset=` | List and search |
+| `GET /api/tracks?scope=mine\|shared\|all&q=&sort=&limit=&offset=` | List and search. `sort` is `added_desc` (default), `added_asc`, `title_asc` or `title_desc` |
 | `GET /api/tracks/{id}` | Track details, including audio metadata (bitrate, sample rate, channels, format, year, genre, track and disc number, composer, file size) |
 | `GET /api/tracks/{id}/stream` | Audio, with range support |
 | `GET /api/tracks/{id}/cover` | Cover art |
