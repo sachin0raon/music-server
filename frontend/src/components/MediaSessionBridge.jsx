@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { coverUrl } from "./Cover";
 import { usePlayer, useTime } from "../state";
 
 // Lock screen, notification shade and headphone/keyboard media keys
@@ -24,7 +25,7 @@ export default function MediaSessionBridge() {
       artist: track.artist,
       album: track.album || "",
       artwork: track.has_cover
-        ? [{ src: `/api/tracks/${track.id}/cover`, sizes: "512x512" }]
+        ? [{ src: coverUrl(track), sizes: "512x512" }]
         : [{ src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" }],
     });
   }, [track?.id, track?.has_cover]); // eslint-disable-line react-hooks/exhaustive-deps

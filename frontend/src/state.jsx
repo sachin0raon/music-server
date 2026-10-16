@@ -159,7 +159,7 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!track) { a.pause(); a.removeAttribute("src"); setTime(0); setDuration(0); return; }
-    a.src = `/api/tracks/${track.id}/stream`;
+    a.src = track.stream_url ?? `/api/tracks/${track.id}/stream`;
     setTime(0);
     setDuration(track.duration || 0);
     a.play().catch(() => setPlaying(false));
@@ -236,6 +236,19 @@ export function PlayerProvider({ children }) {
 
   const cycleRepeat = useCallback(() => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")), []);
 
+  // More of the browsing list arrived (a "Show more" on the folder tab). If this
+  // queue came from that same list, append the new rows so Next keeps going.
+  const extendQueue = useCallback((source, items) => {
+    const s = queueSource.current;
+    if (!source || !s || s.type !== source.type || s.id !== source.id) return;
+    const q = qRef.current;
+    const have = new Set(q.map((t) => t.id));
+    const add = (items || []).filter((t) => t && !have.has(t.id));
+    if (!add.length) return;
+    if (origOrder.current) origOrder.current = [...origOrder.current, ...add.map((t) => t.id)];
+    setQueue([...q, ...add]);
+  }, []);
+
   const toggle = useCallback(() => {
     const a = audioRef.current;
     if (a.paused) a.play().catch(() => {}); else a.pause();
@@ -258,9 +271,9 @@ export function PlayerProvider({ children }) {
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
     track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
-    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue,
+    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue,
   }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
-       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue]);
+       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
   return (

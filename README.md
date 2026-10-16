@@ -125,8 +125,8 @@ All settings are environment variables, normally set in `.env`.
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address of your reverse proxy, as the container sees it. Only it is trusted to say who the real client is. See [Nginx Proxy Manager](#nginx-proxy-manager) |
 | `SESSION_DAYS` | `30` | How long a login lasts |
 | `MAX_UPLOAD_MB` | `200` | Largest single file accepted by the web upload. Keep Nginx Proxy Manager's limit at least this large |
-| `MAX_IMPORT_MB` | `4096` | Size limit for imported files: the folder scan and "Add from a link". The upload limit does not apply to these |
-| `MUSIC_DIR` | unset | Folder of existing music to scan on demand (mounted read-only, e.g. `/music`). Unset hides the scan feature |
+| `MAX_IMPORT_MB` | `4096` | Size limit for imported files: the folder browse/import and "Add from a link". The upload limit does not apply to these |
+| `MUSIC_DIR` | unset | Folder of existing music to browse and import (mounted read-only, e.g. `/music`). Unset hides the **Server music** tab and the detect panel |
 | `DATA_DIR` | `/data` | Where files are stored inside the container (mounted from `./data`) |
 | `STATIC_DIR` | `/app/static` | The built web app. You normally never change this |
 
@@ -309,7 +309,15 @@ Files are stored under server-generated names, never the original file name, so 
 
 For music you already have on the machine. Files are **copied** into the server's own storage, so the music uses disk space twice. Your folder is mounted read-only and is never changed.
 
-You can also do this from the app: open **Upload** and use **Scan the server's music folder**. Any signed-in user can scan; each gets their own private copies, and files they already have are skipped. The command below does the same job without opening the app, and is handy for very large folders.
+### From the app
+
+Library's **Server music** tab browses the folder in place: it lists the files with their tags and covers and plays them straight from the folder, so you can listen before committing to anything. Nothing is copied until you import — tick the songs you want and choose **Import**, or press **Import this** while one is playing. Files you already have are tagged **In your library**. The tab appears only when `MUSIC_DIR` is set and readable, and it updates when you press **Refresh**.
+
+**Upload → Find new music on the server** does the same job as a checklist: it looks through the folder and lists the songs that are not in your library yet, with nothing ticked. Pick the ones you want, or **Select all**, then import. Any signed-in user may look and import; each gets their own private copies, and files they already have are skipped.
+
+### From a shell
+
+Handy for very large folders, or to import without opening the app:
 
 1. In `docker-compose.yml`, uncomment the `/music:ro` volume and set the left side to your folder, for example:
 
@@ -390,7 +398,7 @@ If adding a column fails — the database user lacks `ALTER` rights, for example
 
 ### The web app
 
-- Screens: sign in or create account, Library (My music and Shared tabs, latest upload card), Search, Playlists, Upload, Account (change password, admin tools)
+- Screens: sign in or create account, Library (My music, Shared and Server music tabs, latest upload card), Search, Playlists, Upload, Account (change password, admin tools)
 - A persistent mini player, plus a full Now playing screen whose background glow follows the cover's colours
 - Shuffle and repeat live in the Now playing screen; on the compact bar they appear from the `sm` breakpoint up, so the phone bar keeps only Play and Next
 - Mobile-first with a bottom navigation bar, and a sidebar on wide screens
@@ -449,9 +457,12 @@ All endpoints except register, login and health need a signed-in session. Intera
 | `POST /api/playlists/{id}/tracks` with `{"track_id": n}` | Add a track |
 | `DELETE /api/playlists/{id}/tracks/{track_id}` | Remove a track |
 | `PUT /api/playlists/{id}/order` with `{"track_ids": [n, ...]}` | Save the play order (all visible tracks of the playlist, in order) |
-| `GET /api/library/source` | The scan folder the server was given, and whether it is reachable |
-| `GET /api/library/scan` | Your latest folder scan, with counts and per-file results |
-| `POST /api/library/scan` | Start scanning the folder; it runs in the background |
+| `GET /api/library/source` | The folder the server was given, and whether it is reachable |
+| `GET /api/library/files?sort=&q=&limit=&offset=` | One page of the folder, with tags, cover, stream/cover URLs and whether each file is already in your library |
+| `GET /api/library/file/{token}/stream` | Play a folder file in place, with range support |
+| `GET /api/library/file/{token}/cover` | Cover art embedded in a folder file |
+| `GET /api/library/scan` | The folder files that are not in your library yet |
+| `POST /api/library/import` with `{"tokens": ["..."]}` | Copy the chosen folder files into your library |
 
 ---
 
@@ -486,7 +497,7 @@ New tables and columns are created automatically on startup, so restarting is al
 | "Too many attempts" | The rate limit was hit. Wait 15 minutes, or restart the container |
 | Import says "Not a folder" | The folder is not mounted into the container. Check the `/music:ro` line in `docker-compose.yml` |
 | Import says "No such user" | Register that account in the app first |
-| The scan says the folder is not mounted | `MUSIC_DIR` is not there inside the container. Set the matching volume in `docker-compose.yml` (e.g. `- /mnt/storage/music:/music:ro`) and set `MUSIC_DIR=/music` |
+| The Server music tab is missing | `MUSIC_DIR` is not set or not mounted inside the container, or the folder is not readable. Set the matching volume in `docker-compose.yml` (e.g. `- /mnt/storage/music:/music:ro`) and set `MUSIC_DIR=/music` |
 | "Add from a link" refuses a link | The link must be `http`/`https` and public. Links to local or private addresses are blocked on purpose |
 | Playback does not start on a phone | Browsers require a tap to start audio. Tap the play button |
 | No Install option appears | Needs HTTPS, and the app must not already be installed. On iPhone use Share, then Add to Home Screen. Some browsers only offer it after you have used the site for a moment |

@@ -17,9 +17,11 @@ export default function NowPlaying() {
   const reduce = useReducedMotion();
   const [menu, setMenu] = useState(false);
   const [err, setErr] = useState("");
+  const [importing, setImporting] = useState(false);
+  const isFolder = track?.source === "folder"; // a preview from the server folder
   // With repeat all/one, the end of the list wraps, so that is what comes next.
   const upNext = queue[index + 1] ?? (repeat !== "off" && queue.length > 1 ? queue[0] : undefined);
-  const { data: info } = useFetch(track ? `/api/tracks/${track.id}` : null);
+  const { data: info } = useFetch(track && !isFolder ? `/api/tracks/${track.id}` : null);
   const extra = info && info.id === track?.id ? [info.album, info.year, info.genre].filter(Boolean).join(" · ") : "";
   const root = useRef(null);
   useFocusTrap(root);
@@ -39,6 +41,19 @@ export default function NowPlaying() {
     } catch (e) { setErr(e.message); }
   };
 
+  // Keep a folder song by copying it into this user's library, from the player.
+  const importThis = async () => {
+    if (importing) return;
+    setImporting(true); setErr("");
+    try {
+      const d = await api.post("/api/library/import", { tokens: [track.id] });
+      const r = d.results?.[0];
+      if (r?.status === "ok" || r?.status === "duplicate") { patchTrack(track.id, { in_library: true }); bump(); }
+      else setErr(r?.detail || "Could not import this file");
+    } catch (e) { setErr(e.message); }
+    finally { setImporting(false); }
+  };
+
   return (
     <motion.div ref={root} className="fixed inset-0 z-40 overflow-y-auto bg-ground" role="dialog" aria-modal="true" aria-label="Now playing"
       initial={{ y: reduce ? 0 : "100%" }} animate={{ y: 0 }} exit={{ y: reduce ? 0 : "100%" }}
@@ -50,7 +65,7 @@ export default function NowPlaying() {
       <div className="relative mx-auto flex min-h-full max-w-md flex-col gap-6 [@media(max-height:500px)]:gap-3 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(1.25rem+env(safe-area-inset-top))] lg:max-w-5xl">
         <div className="flex items-center justify-between">
           <IconButton label="Close player" variant="glass" onClick={() => setOpen(false)}><CaretDown size={20} /></IconButton>
-          <IconButton label="More options" variant="glass" onClick={() => setMenu(true)}><DotsThree size={22} weight="bold" /></IconButton>
+          {!isFolder && <IconButton label="More options" variant="glass" onClick={() => setMenu(true)}><DotsThree size={22} weight="bold" /></IconButton>}
         </div>
 
         <div className="flex flex-1 flex-col gap-6 [@media(max-height:500px)]:gap-3 lg:grid lg:grid-cols-2 lg:items-center lg:gap-16">
@@ -66,7 +81,15 @@ export default function NowPlaying() {
                 <p className="truncate text-body text-mute">{track.artist}</p>
                 {extra && <p className="truncate text-small text-mute">{extra}</p>}
               </div>
-              {track.owned ? (
+              {isFolder ? (
+                track.in_library ? (
+                  <span className="shrink-0 text-small text-mute">In your library</span>
+                ) : (
+                  <Button variant="accent" onClick={importThis} disabled={importing} className="shrink-0">
+                    {importing ? "Importing" : "Import this"}
+                  </Button>
+                )
+              ) : track.owned ? (
                 <Button onClick={toggleShare} aria-pressed={!!track.is_shared} className="shrink-0">
                   {track.is_shared && <span className="h-2 w-2 rounded-full bg-accent" />}{track.is_shared ? "Shared" : "Share"}
                 </Button>

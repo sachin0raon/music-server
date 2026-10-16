@@ -1,66 +1,80 @@
 import { useEffect, useRef, useState } from "react";
 import { FolderOpen } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
-import { Button } from "./Button";
+import TrackRow from "./TrackRow";
 import ImportResults from "./ImportResults";
+import { Button } from "./Button";
 import { api } from "../api";
-import { useData } from "../state";
+import { useData, usePlayer } from "../state";
 
-const summary = (job) => {
-  const parts = [];
-  if (job.added) parts.push(`${job.added} added`);
-  if (job.skipped) parts.push(`${job.skipped} already in your library`);
-  if (job.failed) parts.push(`${job.failed} failed`);
-  return parts.join(", ") || "No new tracks";
-};
-
-// Scans MUSIC_DIR on the server and copies new files into the signed-in user's library.
-// The scan runs in the background, so the page polls while it works.
+// Looks through MUSIC_DIR and shows what is not in the signed-in user's library yet.
+// Nothing is copied until the user confirms the songs they want: the list starts
+// empty of ticks and importing runs the normal upload pipeline for each pick.
 export default function FolderScan() {
   const { bump } = useData();
-  const [source, setSource] = useState(null);
-  const [job, setJob] = useState(null);
+  const { patchTrack } = usePlayer();
+  const [source, setSource] = useState(undefined); // undefined = still asking
+  const [items, setItems] = useState(null); // null = not checked yet
+  const [checking, setChecking] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [importing, setImporting] = useState(false);
+  const [results, setResults] = useState(null);
   const [err, setErr] = useState("");
-  const [starting, setStarting] = useState(false);
-  const prev = useRef(null);
+  const gen = useRef(0);
 
   useEffect(() => {
     let live = true;
-    Promise.all([api.get("/api/library/source"), api.get("/api/library/scan")])
-      .then(([s, j]) => { if (live) { setSource(s); setJob(j.job); } })
-      .catch((e) => live && setErr(e.message));
+    api.get("/api/library/source").then((s) => live && setSource(s)).catch((e) => live && setErr(e.message));
     return () => { live = false; };
   }, []);
 
-  // Poll while a scan runs, so the counts and the list fill in live
-  useEffect(() => {
-    if (job?.state !== "running") return;
-    const id = setInterval(() => {
-      api.get("/api/library/scan").then((j) => setJob(j.job)).catch(() => {});
-    }, 1000);
-    return () => clearInterval(id);
-  }, [job?.state]);
-
-  // Refresh the library once when a scan finishes
-  useEffect(() => {
-    if (prev.current === "running" && job?.state && job.state !== "running") bump();
-    prev.current = job?.state ?? null;
-  }, [job?.state, bump]);
-
-  const start = async () => {
-    if (starting) return;
-    setStarting(true); setErr("");
+  const check = async () => {
+    if (checking) return;
+    gen.current += 1;
+    const g = gen.current;
+    setChecking(true); setErr("");
     try {
-      const j = await api.post("/api/library/scan");
-      setJob(j.job);
+      const d = await api.get("/api/library/scan");
+      if (g !== gen.current) return;
+      setItems(d.items);
+      setSelected(new Set());
     } catch (e) {
-      setErr(e.message);
+      if (g === gen.current) setErr(e.message);
     } finally {
-      setStarting(false);
+      if (g === gen.current) setChecking(false);
     }
   };
 
-  const running = job?.state === "running";
+  const toggle = (t) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(t.id)) n.delete(t.id); else n.add(t.id);
+    return n;
+  });
+
+  const allSelected = Boolean(items?.length) && items.every((t) => selected.has(t.id));
+
+  const importSelected = async () => {
+    const tokens = [...selected];
+    if (!tokens.length || importing) return;
+    setImporting(true); setErr("");
+    try {
+      const d = await api.post("/api/library/import", { tokens });
+      setResults(d.results);
+      const done = new Set(d.results.map((r, i) => (["ok", "duplicate"].includes(r.status) ? tokens[i] : null)));
+      setItems((p) => (p ? p.filter((t) => !done.has(t.id)) : p));
+      setSelected(new Set());
+      // If one of the imported songs is playing as a preview, mark its queue copy.
+      d.results.forEach((r, i) => {
+        if (["ok", "duplicate"].includes(r.status)) patchTrack(tokens[i], { in_library: true });
+      });
+      bump();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const configured = source?.configured;
   const usable = configured && source.exists && source.readable;
 
@@ -69,10 +83,10 @@ export default function FolderScan() {
       <div className="flex items-start gap-3">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-tile bg-accent-soft text-accent ring-1 ring-inset ring-accent/20"><FolderOpen size={22} /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-heading font-semibold">Scan the server's music folder</p>
+          <p className="text-heading font-semibold">Find new music on the server</p>
           <p className="mt-1 text-body text-mute">
-            Adds any file in the folder that is not already in your library. Files are copied in, so the
-            original folder is never changed. Tracks are private to you until you share them.
+            Looks through the server's music folder and lists the songs that are not in your library yet.
+            Nothing is copied until you pick the ones you want. Tracks are private to you until you share them.
           </p>
           {source && (
             <p className="mt-2 text-small text-mute">
@@ -81,7 +95,7 @@ export default function FolderScan() {
             </p>
           )}
           {configured && !source.exists && (
-            <p className="mt-2 text-small text-danger">The folder is not mounted inside the container, so there is nothing to scan.</p>
+            <p className="mt-2 text-small text-danger">The folder is not mounted inside the container, so there is nothing to look through.</p>
           )}
           {configured && source.exists && !source.readable && (
             <p className="mt-2 text-small text-danger">The folder cannot be read.</p>
@@ -95,21 +109,50 @@ export default function FolderScan() {
 
           {usable && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button variant="accent" onClick={start} disabled={running || starting}>
-                {running ? "Scanning…" : "Scan for new music"}
+              <Button variant="accent" onClick={check} disabled={checking}>
+                {checking ? "Looking…" : items === null ? "Check for new music" : "Check again"}
               </Button>
-              {running && (
+              {items?.length > 0 && (
                 <p className="text-small text-mute" role="status">
-                  {job.found ? `Adding ${job.processed} of ${job.found}…` : "Looking through the folder…"}
+                  {items.length} new {items.length === 1 ? "song" : "songs"} not in your library.
                 </p>
               )}
-              {!running && job?.state === "done" && <p className="text-small text-mute">{summary(job)}</p>}
+              {items?.length === 0 && !checking && (
+                <p className="text-small text-mute" role="status">Everything in the folder is already in your library.</p>
+              )}
             </div>
           )}
-          {job?.state === "error" && job.error && <p role="alert" className="mt-2 text-small text-danger">{job.error}</p>}
         </div>
       </div>
-      {job?.state === "done" && <ImportResults items={job.results} />}
+
+      {items?.length > 0 && (
+        <>
+          <div className="mt-4 mb-2 flex flex-wrap items-center gap-2">
+            <p className="min-w-0 flex-1 text-small text-mute">
+              Pick the ones you want, or take them all.
+            </p>
+            <Button small onClick={() => (allSelected ? setSelected(new Set()) : setSelected(new Set(items.map((t) => t.id))))}>
+              {allSelected ? "Clear selection" : "Select all"}
+            </Button>
+          </div>
+          <GlassPanel as="ul" className="p-2">
+            {items.map((t) => (
+              <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} />
+            ))}
+          </GlassPanel>
+          {selected.size > 0 && (
+            <GlassPanel className="mt-4 flex flex-wrap items-center gap-3 p-3">
+              <p className="min-w-0 flex-1 text-small text-mute">{selected.size} selected</p>
+              <Button variant="accent" onClick={importSelected} disabled={importing}>
+                {importing ? "Importing" : `Import ${selected.size === 1 ? "this song" : `${selected.size} songs`}`}
+              </Button>
+              <Button onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
+            </GlassPanel>
+          )}
+        </>
+      )}
+
+      {results && <ImportResults items={results} />}
     </GlassPanel>
   );
 }
