@@ -39,6 +39,7 @@ Each user has a private library. Users can upload their own files, share a track
 - Playlists, private to each user, which can include your own tracks and shared ones
 - Search across your tracks and shared tracks (title, artist, album)
 - Streaming with seeking, and a full Now playing screen with cover art
+- Shuffle and repeat (off, all, one), with Previous restarting the current track when it has been playing for a few seconds
 - Installable as an app on phones and computers, with lock-screen and media-key controls
 - Reads title, artist, album, duration and embedded cover art from the files' tags
 - Admin tools: list users, reset passwords (in the app or from the command line)
@@ -277,7 +278,8 @@ A track is visible to a user only if they **own it or it is shared**. Everything
 
 - Playlists are private to the user who made them.
 - They can contain your own tracks and shared tracks, but never someone else's private tracks.
-- Tracks play in the order they were added. Reordering is not built.
+- Tracks play in the order shown, and the order can be changed from the playlist: each track has Move up and Move down buttons that work with a mouse, a thumb or a keyboard, and the new order is saved as you go.
+- A track that is later unshared stays in the playlist at its position, but is hidden until it is shared again.
 - Deleting a playlist never deletes tracks.
 
 ---
@@ -382,6 +384,7 @@ If adding a column fails — the database user lacks `ALTER` rights, for example
 
 - Screens: sign in or create account, Library (My music and Shared tabs, latest upload card), Search, Playlists, Upload, Account (change password, admin tools)
 - A persistent mini player, plus a full Now playing screen whose background glow follows the cover's colours
+- Shuffle and repeat live in the Now playing screen; on the compact bar they appear from the `sm` breakpoint up, so the phone bar keeps only Play and Next
 - Mobile-first with a bottom navigation bar, and a sidebar on wide screens
 - Loading, empty and error states on every list
 - Fonts are self-hosted (Geist), so nothing loads from outside
@@ -436,6 +439,7 @@ All endpoints except register, login and health need a signed-in session. Intera
 | `GET`, `PATCH`, `DELETE /api/playlists/{id}` | Open, rename, delete |
 | `POST /api/playlists/{id}/tracks` with `{"track_id": n}` | Add a track |
 | `DELETE /api/playlists/{id}/tracks/{track_id}` | Remove a track |
+| `PUT /api/playlists/{id}/order` with `{"track_ids": [n, ...]}` | Save the play order (all visible tracks of the playlist, in order) |
 
 ---
 
@@ -487,7 +491,6 @@ Container logs: `docker compose logs -f music-server`.
 - **Open registration with no quotas.** Anyone who can reach the site can sign up and upload, so they can fill your disk or upload content you would then be hosting. There is also no setting to turn registration off. If the server is reachable from the internet, restrict access (for example with an access list in Nginx Proxy Manager or a VPN). Quotas and approval for new accounts are the natural next step.
 - No email, so no emailed password resets.
 - No automated tests. Testing is manual (checklist below).
-- Playlists cannot be reordered.
 - No transcoding, so a phone on a slow connection streams the original file.
 - Admins cannot delete other users' tracks.
 - Import copies files rather than reading them in place.
@@ -525,4 +528,6 @@ npm run dev     # proxies /api to http://localhost:8000
 - **Share and unshare:** toggle sharing and confirm it takes effect immediately for the other user.
 - **Upload:** try a normal file, a corrupt file, a very large FLAC and a multi-file batch.
 - **Playback:** check seeking and background play on a phone browser through Nginx Proxy Manager.
+- **Player modes:** turn Shuffle on and press Next through a playlist, confirming every track plays once before any repeats; check Repeat all wraps at the end, Repeat one restarts the same track, and Previous restarts a track that has been playing for a few seconds.
+- **Reordering:** on a phone and with the keyboard, move tracks up and down in a playlist and confirm the order survives a reload; try adding another user's private track id to the order request and confirm it is refused.
 - **Delete:** confirm the file, cover art and playlist entries are all removed.

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
+import { canGoNext, nextStep, restoreOrder, shuffledQueue } from "./playqueue";
 
 /* ---------- auth ---------- */
 const AuthCtx = createContext(null);
@@ -98,22 +99,37 @@ export function PlayerProvider({ children }) {
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [open, setOpen] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState("off"); // "off" | "all" | "one"
   const qRef = useRef(queue);
   const failures = useRef(0); // consecutive playback errors
   const iRef = useRef(index);
+  const shuffleRef = useRef(shuffle);
+  const repeatRef = useRef(repeat); // read inside `next`, which must keep a stable identity
+  const origOrder = useRef(null); // track ids in the pre-shuffle order; null while shuffle is off
   qRef.current = queue;
   iRef.current = index;
+  shuffleRef.current = shuffle;
+  repeatRef.current = repeat;
   const track = queue[index] ?? null;
 
-  const next = useCallback((auto = false) => {
-    const q = qRef.current, ix = iRef.current;
-    if (ix + 1 < q.length) setIndex(ix + 1);
-    else if (auto) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+  // Restart the current track from the top without moving through the queue.
+  const restart = useCallback(() => {
+    const a = audioRef.current;
+    a.currentTime = 0;
+    a.play().catch(() => {});
   }, []);
+
+  const next = useCallback((auto = false) => {
+    const step = nextStep({ index: iRef.current, length: qRef.current.length, repeat: repeatRef.current, auto });
+    if (step === "restart") restart();
+    else if (step === "stop") { const a = audioRef.current; a.pause(); a.currentTime = 0; }
+    else if (typeof step === "number") setIndex(step);
+  }, [restart]);
 
   const prev = useCallback(() => {
     const a = audioRef.current, ix = iRef.current;
-    if (a.currentTime > 3 || ix <= 0) a.currentTime = 0;
+    if (a.currentTime > 3 || ix <= 0) a.currentTime = 0; // more than ~3s in: restart the track
     else setIndex(ix - 1);
   }, []);
 
@@ -148,16 +164,53 @@ export function PlayerProvider({ children }) {
     a.play().catch(() => setPlaying(false));
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); } }, [user]);
+  useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); setShuffle(false); setRepeat("off"); origOrder.current = null; } }, [user]);
 
   const playTrack = useCallback((t, list) => {
-    const a = audioRef.current;
     failures.current = 0;
-    const i = list.findIndex((x) => x.id === t.id);
-    if (qRef.current[iRef.current]?.id === t.id) { a.currentTime = 0; a.play().catch(() => {}); }
+    if (shuffleRef.current) {
+      // Shuffled run starting from the tapped track. The pre-shuffle order is
+      // remembered so turning shuffle off can put it back.
+      origOrder.current = list.map((x) => x.id);
+      setQueue(shuffledQueue(list, t.id));
+      setIndex(0);
+      if (qRef.current[iRef.current]?.id === t.id) restart(); // tapping the current track replays it
+      return;
+    }
+    origOrder.current = null;
+    if (qRef.current[iRef.current]?.id === t.id) restart();
     setQueue(list);
-    setIndex(i);
+    setIndex(list.findIndex((x) => x.id === t.id));
+  }, [restart]);
+
+  // Shuffle: reorder the live queue so the current track stays first (playback is
+  // not interrupted) and remember the old order. Turning it off restores that
+  // order with the same track still playing.
+  const toggleShuffle = useCallback(() => {
+    const q = qRef.current, ix = iRef.current;
+    if (!shuffleRef.current) {
+      if (q.length) {
+        origOrder.current = q.map((t) => t.id);
+        setQueue(shuffledQueue(q, q[ix]?.id));
+        setIndex(0);
+      }
+      setShuffle(true);
+      return;
+    }
+    const order = origOrder.current;
+    origOrder.current = null;
+    if (order) {
+      const restored = restoreOrder(order, q); // newest copies of each track, gone ones skipped
+      if (restored.length) {
+        const at = restored.findIndex((t) => t.id === q[ix]?.id);
+        setQueue(restored);
+        setIndex(at < 0 ? 0 : at);
+      }
+    }
+    setShuffle(false);
   }, []);
+
+  const cycleRepeat = useCallback(() => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")), []);
 
   const toggle = useCallback(() => {
     const a = audioRef.current;
@@ -171,14 +224,19 @@ export function PlayerProvider({ children }) {
   const dropTrack = useCallback((id) => {
     const q = qRef.current, ix = iRef.current, i = q.findIndex((t) => t.id === id);
     if (i < 0) return;
+    if (origOrder.current) origOrder.current = origOrder.current.filter((x) => x !== id);
     const nq = q.filter((t) => t.id !== id);
     setQueue(nq);
     setIndex(i < ix ? ix - 1 : i === ix && ix >= nq.length ? -1 : ix);
   }, []);
 
+  // Repeat counts as "there is a next" because it wraps back to the top.
+  const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
     track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
-  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack]);
+    shuffle, repeat, toggleShuffle, cycleRepeat, canNext,
+  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
+       shuffle, repeat, toggleShuffle, cycleRepeat, canNext]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
   return (

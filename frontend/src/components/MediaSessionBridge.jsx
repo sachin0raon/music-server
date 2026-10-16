@@ -3,10 +3,10 @@ import { usePlayer, useTime } from "../state";
 
 // Lock screen, notification shade and headphone/keyboard media keys
 export default function MediaSessionBridge() {
-  const { track, playing, queue, index, play, pause, next, prev, seek } = usePlayer();
+  const { track, playing, play, pause, next, prev, seek, canNext } = usePlayer();
   const { time, duration } = useTime();
   const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
-  const hasNext = index + 1 < queue.length;
+  const hasNext = canNext; // repeat all/one keeps the lock-screen Next alive so it can wrap
   const timeRef = useRef(0);
   const durRef = useRef(0);
   timeRef.current = time;

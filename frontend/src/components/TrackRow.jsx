@@ -1,20 +1,24 @@
-import { DotsThree, Play } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, DotsThree, Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import EqBars from "./EqBars";
 import { IconButton } from "./Button";
 import { fmt } from "../api";
 import { usePlayer } from "../state";
 
-export default function TrackRow({ track, list, onMenu }) {
+// `onMove(delta)`, `at` (1-based) and `total` are passed only by the playlist
+// view, which grows up/down buttons so the order can be changed with a thumb or
+// a keyboard. Everywhere else the row renders exactly as before.
+export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 0, rowRef }) {
   const { track: current, playing, playTrack } = usePlayer();
   const active = current?.id === track.id;
   const eq = active && playing;
   return (
-    <li className={`group relative flex items-center gap-1 rounded-tile pr-1 transition-colors duration-150 ${active ? "bg-accent-soft" : "hover:bg-white/[0.06] focus-within:bg-white/[0.06]"}`}>
+    <li ref={rowRef} className={`group relative flex items-center gap-1 rounded-tile pr-1 transition-colors duration-150 ${active ? "bg-accent-soft" : "hover:bg-white/[0.06] focus-within:bg-white/[0.06]"}`}>
       <button onClick={() => playTrack(track, list)} aria-label={`Play ${track.title} by ${track.artist}`} aria-current={active ? "true" : undefined}
         className="flex min-h-[64px] min-w-0 flex-1 items-center gap-3.5 rounded-tile pl-2 text-left">
-        <span className="relative shrink-0">
-          <Cover track={track} className="h-12 w-12 transition-transform duration-200 ease-out group-hover:scale-[1.04]" />
+        {/* The scale sits on the wrapper, not the Cover, so the hover overlay grows with the image instead of leaving a ring of un-darkened cover around it */}
+      <span className="relative shrink-0 transition-transform duration-200 ease-out group-hover:scale-[1.04]">
+          <Cover track={track} className="h-12 w-12" />
           <span className={`absolute inset-0 grid place-items-center rounded-xl bg-black/55 text-ink transition-opacity duration-150 ${eq ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
             {eq ? <EqBars /> : <Play size={18} weight="fill" />}
           </span>
@@ -25,7 +29,15 @@ export default function TrackRow({ track, list, onMenu }) {
         </span>
       </button>
       {track.is_shared && track.owned && <span className="hidden rounded-full border border-line-strong px-2.5 py-0.5 text-micro text-mute sm:inline">Shared</span>}
-      <span className="tnum w-11 text-right text-small text-mute">{fmt(track.duration)}</span>
+      <span className={`tnum w-11 text-right text-small text-mute ${onMove ? "hidden sm:block" : ""}`}>{fmt(track.duration)}</span>
+      {onMove && (
+        <>
+          <IconButton label={`Move ${track.title} up`} data-move="up" size="sm" disabled={at <= 1}
+            onClick={() => onMove(-1)} className="text-mute"><CaretUp size={18} weight="bold" /></IconButton>
+          <IconButton label={`Move ${track.title} down`} data-move="down" size="sm" disabled={at >= total}
+            onClick={() => onMove(1)} className="text-mute"><CaretDown size={18} weight="bold" /></IconButton>
+        </>
+      )}
       <IconButton label={`More options for ${track.title}`} onClick={() => onMenu(track)} className="text-mute"><DotsThree size={24} weight="bold" /></IconButton>
     </li>
   );

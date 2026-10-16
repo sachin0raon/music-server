@@ -11,13 +11,14 @@ import { api, fmt } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
 
 export default function NowPlaying() {
-  const { track, queue, index, next, setOpen, patchTrack } = usePlayer();
+  const { track, queue, index, next, setOpen, patchTrack, repeat } = usePlayer();
   const { bump } = useData();
   const color = useDominantColor(track);
   const reduce = useReducedMotion();
   const [menu, setMenu] = useState(false);
   const [err, setErr] = useState("");
-  const upNext = queue[index + 1];
+  // With repeat all/one, the end of the list wraps, so that is what comes next.
+  const upNext = queue[index + 1] ?? (repeat !== "off" && queue.length > 1 ? queue[0] : undefined);
   const { data: info } = useFetch(track ? `/api/tracks/${track.id}` : null);
   const extra = info && info.id === track?.id ? [info.album, info.year, info.genre].filter(Boolean).join(" · ") : "";
   const root = useRef(null);

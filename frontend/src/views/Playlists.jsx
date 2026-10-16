@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
 import { Play, Playlist } from "@phosphor-icons/react";
@@ -64,6 +64,33 @@ export function PlaylistDetail() {
   const [mode, setMode] = useState(null); // "rename" | "delete"
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
+  const [order, setOrder] = useState([]); // local play order while reordering
+  const [announce, setAnnounce] = useState(""); // so a keyboard/screen-reader move is not silent
+  const rowRefs = useRef(new Map());
+  const pendingFocus = useRef(null);
+  const saveQueue = useRef(Promise.resolve());
+  const latestIds = useRef(null);
+
+  // Each fetch (first load, rename, add/remove via the menu) resets the local order.
+  useEffect(() => { if (data?.tracks) setOrder(data.tracks); }, [data]);
+
+  const setRowRef = useCallback((trackId) => (el) => {
+    if (el) rowRefs.current.set(trackId, el);
+    else rowRefs.current.delete(trackId);
+  }, []);
+
+  // After a move, keep focus on that track's button so the key can be pressed again;
+  // if it just became disabled at an end, move to the row's other button instead.
+  useEffect(() => {
+    const want = pendingFocus.current;
+    if (!want) return;
+    pendingFocus.current = null;
+    const row = rowRefs.current.get(want.id);
+    if (!row) return;
+    const same = row.querySelector(`[data-move="${want.dir}"]`);
+    const other = row.querySelector(`[data-move="${want.dir === "up" ? "down" : "up"}"]`);
+    (same && !same.disabled ? same : other)?.focus();
+  }, [order]);
 
   const act = async (fn) => { setErr(""); try { await fn(); bump(); } catch (e) { setErr(e.message); } };
   const rename = (e) => { e.preventDefault(); act(async () => { await api.patch(`/api/playlists/${id}`, { name }); setMode(null); }); };
@@ -71,6 +98,26 @@ export function PlaylistDetail() {
   const remove = async () => {
     setErr("");
     try { await api.del(`/api/playlists/${id}`); navigate("/playlists", { replace: true }); } catch (e) { setErr(e.message); }
+  };
+
+  // One save at a time, in order: two quick moves must not race on the server.
+  const move = (from, delta) => {
+    const to = from + delta;
+    if (to < 0 || to >= order.length) return;
+    const next = order.slice();
+    [next[from], next[to]] = [next[to], next[from]];
+    const moved = next[to];
+    setErr("");
+    pendingFocus.current = { id: moved.id, dir: delta < 0 ? "up" : "down" };
+    setOrder(next);
+    setAnnounce(`Moved ${moved.title} to position ${to + 1} of ${next.length}.`);
+    const ids = next.map((t) => t.id);
+    latestIds.current = ids;
+    saveQueue.current = saveQueue.current
+      .then(() => api.put(`/api/playlists/${id}/order`, { track_ids: ids }))
+      // A newer move already set the order; only settle on this response if it is still the latest.
+      .then((updated) => { if (latestIds.current === ids) setOrder(updated.tracks); })
+      .catch((e) => { if (latestIds.current === ids) { setErr(e.message); reload(); } });
   };
 
   return (
@@ -83,11 +130,11 @@ export function PlaylistDetail() {
             <div className="min-w-0 pb-1">
               <p className="text-micro font-medium uppercase tracking-wider text-mute">Playlist</p>
               <h1 className="truncate text-title font-semibold sm:text-display">{data.name}</h1>
-              <p className="text-small text-mute sm:text-body">{data.track_count} {data.track_count === 1 ? "track" : "tracks"}</p>
+              <p className="text-small text-mute sm:text-body">{order.length} {order.length === 1 ? "track" : "tracks"}</p>
             </div>
           </div>
           <div className="mb-5 flex flex-wrap gap-2">
-            {data.tracks.length > 0 && <Button variant="accent" onClick={() => playTrack(data.tracks[0], data.tracks)}><Play weight="fill" size={16} />Play</Button>}
+            {order.length > 0 && <Button variant="accent" onClick={() => playTrack(order[0], order)}><Play weight="fill" size={16} />Play</Button>}
             <Button onClick={() => { setName(data.name); setMode("rename"); }}>Rename</Button>
             <Button onClick={() => setMode("delete")}>Delete</Button>
           </div>
@@ -104,10 +151,18 @@ export function PlaylistDetail() {
             </GlassPanel>
           )}
           {err && <p role="alert" className="mb-3 text-small text-danger">{err}</p>}
-          {!data.tracks.length ? (
+          {!order.length ? (
             <Empty title="This playlist is empty" icon={Playlist}>Open the menu on any song and choose Add to playlist.</Empty>
           ) : (
-            <GlassPanel as="ul" className="p-2">{data.tracks.map((t) => <TrackRow key={t.id} track={t} list={data.tracks} onMenu={setMenu} />)}</GlassPanel>
+            <>
+              <p aria-live="polite" className="sr-only">{announce}</p>
+              <GlassPanel as="ul" className="p-2">
+                {order.map((t, i) => (
+                  <TrackRow key={t.id} track={t} list={order} onMenu={setMenu}
+                    onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)} />
+                ))}
+              </GlassPanel>
+            </>
           )}
         </>
       )}

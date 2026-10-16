@@ -134,6 +134,13 @@ body {
   .interactive:hover { background: rgba(255, 255, 255, 0.06); }
 }
 
+/* Player mode toggles (shuffle, repeat): pressed = the mode is on. The hover rule
+   is needed because .btn-ghost:hover is more specific than the base rule. */
+.btn-round[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-accent); }
+@media (hover: hover) {
+  .btn-round[aria-pressed="true"]:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 24%, transparent); color: var(--color-accent-strong); }
+}
+
 /* ---------- Fields ---------- */
 .field { width: 100%; min-height: 48px; border-radius: 16px; padding: 0 1rem; font-size: 16px; color: var(--color-ink); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--color-line-strong); }
 .field::placeholder { color: var(--color-faint); }

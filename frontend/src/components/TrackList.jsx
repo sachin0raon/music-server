@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import { Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
@@ -10,10 +10,14 @@ import { Empty, ErrorBox, Skeleton } from "./States";
 import { usePlayer, useTracks } from "../state";
 
 // Used by Library (scope mine/shared) and Search (scope all + q)
-export default function TrackList({ scope, q, empty, featured }) {
+export default function TrackList({ scope, q, empty, featured, onTotal }) {
   const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q);
   const { playTrack } = usePlayer();
   const [menu, setMenu] = useState(null);
+
+  // Let the parent show the scope's total (Library puts it under the header).
+  // Only once loaded, so a count of 0 never flashes before the real number.
+  useEffect(() => { if (!loading) onTotal?.(total); }, [loading, onTotal, total]);
 
   if (loading) return <Skeleton />;
   if (error && !items.length) return <ErrorBox message={error} onRetry={reload} />;

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MusicNotes, Plus, ShareNetwork } from "@phosphor-icons/react";
 import TrackList from "../components/TrackList";
@@ -11,13 +12,15 @@ const TABS = [["mine", "My music"], ["shared", "Shared"]];
 export default function Library() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "shared" ? "shared" : "mine";
+  const [total, setTotal] = useState(null);
   return (
     <>
       <PageHeader title="Library" className="mb-4"
+        subtitle={total > 0 ? `${total} ${total === 1 ? "track" : "tracks"}` : undefined}
         actions={<IconButton as={Link} to="/upload" label="Upload music" variant="glass"><Plus size={20} /></IconButton>} />
       <Tabs label="Library" tabs={TABS} value={tab} className="mb-5"
         onChange={(id) => setParams(id === "mine" ? {} : { tab: id }, { replace: true })} />
-      <TrackList key={tab} scope={tab} featured={tab === "mine"}
+      <TrackList key={tab} scope={tab} featured={tab === "mine"} onTotal={setTotal}
         empty={tab === "mine" ? (
           <Empty title="No music yet" icon={MusicNotes} action={<Button as={Link} to="/upload" variant="accent">Upload music</Button>}>
             Add your first tracks. Only you can see them until you share them.

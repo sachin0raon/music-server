@@ -21,6 +21,11 @@ class AddTrackBody(BaseModel):
     track_id: int
 
 
+class OrderBody(BaseModel):
+    # The tracks the user can see in this playlist, in the order they should play
+    track_ids: list[int] = Field(max_length=1000)
+
+
 def _get_playlist(db: DbSession, user: User, playlist_id: int) -> Playlist:
     playlist = db.scalar(select(Playlist).where(Playlist.id == playlist_id, Playlist.owner_id == user.id))
     if playlist is None:
@@ -30,6 +35,19 @@ def _get_playlist(db: DbSession, user: User, playlist_id: int) -> Playlist:
 
 def _playlist_out(p: Playlist, count: int) -> dict:
     return {"id": p.id, "name": p.name, "track_count": count, "created_at": p.created_at}
+
+
+def _playlist_detail(db: DbSession, playlist: Playlist, user: User) -> dict:
+    """The playlist plus its visible tracks, in stored order. Unchanged shape."""
+    rows = db.execute(
+        select(Track, User.username)
+        .join(PlaylistTrack, PlaylistTrack.track_id == Track.id)
+        .join(User, User.id == Track.owner_id)
+        .where(PlaylistTrack.playlist_id == playlist.id, visible_filter(user))
+        .order_by(PlaylistTrack.position, PlaylistTrack.id)
+    ).all()
+    items = [track_out(t, user.id, owner) for t, owner in rows]
+    return {**_playlist_out(playlist, len(items)), "tracks": items}
 
 
 def _count(db: DbSession, user: User, playlist_ids: list[int]) -> dict[int, int]:
@@ -64,15 +82,7 @@ def create_playlist(body: NameBody, user: User = Depends(current_user), db: DbSe
 @router.get("/{playlist_id}")
 def get_playlist(playlist_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
     playlist = _get_playlist(db, user, playlist_id)
-    rows = db.execute(
-        select(Track, User.username)
-        .join(PlaylistTrack, PlaylistTrack.track_id == Track.id)
-        .join(User, User.id == Track.owner_id)
-        .where(PlaylistTrack.playlist_id == playlist.id, visible_filter(user))
-        .order_by(PlaylistTrack.position, PlaylistTrack.id)
-    ).all()
-    items = [track_out(t, user.id, owner) for t, owner in rows]
-    return {**_playlist_out(playlist, len(items)), "tracks": items}
+    return _playlist_detail(db, playlist, user)
 
 
 @router.patch("/{playlist_id}")
@@ -110,3 +120,26 @@ def remove_track(playlist_id: int, track_id: int, user: User = Depends(current_u
     playlist = _get_playlist(db, user, playlist_id)
     db.query(PlaylistTrack).filter(PlaylistTrack.playlist_id == playlist.id, PlaylistTrack.track_id == track_id).delete()
     db.commit()
+
+
+@router.put("/{playlist_id}/order")
+def reorder_tracks(playlist_id: int, body: OrderBody, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Store a new play order. The body is every track the caller can see in the
+    playlist, in the wanted order; the stored order is what GET returns.
+
+    One uniform 400 covers a missing, extra, unknown or invisible id, so ids
+    cannot be probed and another user's private track is never accepted."""
+    playlist = _get_playlist(db, user, playlist_id)
+    rows = db.execute(select(PlaylistTrack).where(PlaylistTrack.playlist_id == playlist.id)).scalars().all()
+    by_track = {row.track_id: row for row in rows}
+    visible = db.execute(
+        select(PlaylistTrack.track_id)
+        .join(Track, Track.id == PlaylistTrack.track_id)
+        .where(PlaylistTrack.playlist_id == playlist.id, visible_filter(user))
+    ).scalars().all()
+    if sorted(body.track_ids) != sorted(visible):
+        raise HTTPException(status_code=400, detail="Send every track in the playlist, in order.")
+    for position, track_id in enumerate(body.track_ids):
+        by_track[track_id].position = position
+    db.commit()
+    return _playlist_detail(db, playlist, user)
