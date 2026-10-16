@@ -254,6 +254,15 @@ export function PlayerProvider({ children }) {
     if (a.paused) a.play().catch(() => {}); else a.pause();
   }, []);
 
+  // Jump straight to a queue entry (the queue sheet). Re-tapping the current row
+  // replays it, the same way tapping it in a list does.
+  const jumpTo = useCallback((i) => {
+    const q = qRef.current;
+    if (i < 0 || i >= q.length) return;
+    failures.current = 0;
+    if (i === iRef.current) restart(); else setIndex(i);
+  }, [restart]);
+
   const play = useCallback(() => { audioRef.current.play().catch(() => {}); }, []);
   const pause = useCallback(() => audioRef.current.pause(), []);
   const seek = useCallback((t) => { audioRef.current.currentTime = t; setTime(t); }, []);
@@ -270,9 +279,9 @@ export function PlayerProvider({ children }) {
   // Repeat counts as "there is a next" because it wraps back to the top.
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
-    track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
+    track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
     shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue,
-  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
+  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
        shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 

@@ -1,4 +1,5 @@
 import Cover from "./Cover";
+import Chip from "./Chip";
 import { Skeleton, ErrorBox } from "./States";
 import { fmt, fmtBitrate, fmtChannels, fmtDate, fmtHz, fmtSize } from "../api";
 import { useFetch } from "../state";
@@ -36,9 +37,9 @@ export function TrackDetails({ track }) {
           <p className="truncate text-small text-mute">{track.artist}</p>
           <p className="mt-1.5 flex flex-wrap gap-1.5">
             {track.owned
-              ? <span className={`rounded-full px-2.5 py-0.5 text-micro font-medium ${track.is_shared ? "bg-accent-soft text-accent" : "bg-white/[0.08] text-mute"}`}>{track.is_shared ? "Shared" : "Private"}</span>
-              : track.owner && <span className="rounded-full bg-white/[0.08] px-2.5 py-0.5 text-micro font-medium text-mute">Shared by {track.owner}</span>}
-            {track.format && <span className="rounded-full bg-white/[0.08] px-2.5 py-0.5 text-micro font-medium text-mute">{track.format}</span>}
+              ? <Chip variant={track.is_shared ? "accent" : "soft"}>{track.is_shared ? "Shared" : "Private"}</Chip>
+              : track.owner && <Chip variant="soft">Shared by {track.owner}</Chip>}
+            {track.format && <Chip variant="soft">{track.format}</Chip>}
           </p>
         </div>
       </div>

@@ -20,7 +20,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
   // Only once loaded, so a count of 0 never flashes before the real number.
   useEffect(() => { if (!loading) onTotal?.(total); }, [loading, onTotal, total]);
 
-  if (loading) return <Skeleton />;
+  if (loading) return <Skeleton featured={featured} />;
   if (error && !items.length) return <ErrorBox message={error} onRetry={reload} />;
   if (!items.length) return empty ?? <Empty title="Nothing here yet" />;
 
@@ -32,7 +32,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
     <>
       {latest && (
         <GlassPanel as="section" className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-5">
-          <Cover track={latest} className="h-[122px] w-[122px] shadow-lift sm:h-40 sm:w-40" rounded="rounded-2xl" />
+          <Cover track={latest} eager className="h-[122px] w-[122px] shadow-lift sm:h-40 sm:w-40" rounded="rounded-2xl" />
           <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
             <div>
               <p className="text-micro font-medium uppercase tracking-wider text-accent">Latest upload</p>

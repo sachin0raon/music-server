@@ -2,20 +2,37 @@ import { MusicNotes, WarningCircle } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import { Button } from "./Button";
 
-export function Skeleton({ rows = 6 }) {
+// `featured`: the Library's My-music tab shows a "Latest upload" card above the
+// list, so the skeleton includes it too — otherwise the list jumps down on load.
+export function Skeleton({ rows = 6, featured = false }) {
   return (
-    <GlassPanel className="p-2" aria-busy="true" aria-label="Loading">
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex h-16 items-center gap-3.5 pl-2 pr-3">
-          <div className="shimmer h-12 w-12 rounded-xl" />
-          <div className="flex-1 space-y-2">
-            <div className="shimmer h-3.5 rounded" style={{ width: `${48 - (i % 3) * 8}%` }} />
-            <div className="shimmer h-3 w-1/4 rounded" />
+    <div>
+      {featured && (
+        <GlassPanel className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-5" aria-hidden="true">
+          <div className="shimmer h-[122px] w-[122px] shrink-0 rounded-2xl sm:h-40 sm:w-40" />
+          <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
+            <div className="space-y-3">
+              <div className="shimmer h-3 w-24 rounded" />
+              <div className="shimmer h-5 w-2/3 rounded" />
+              <div className="shimmer h-3.5 w-1/3 rounded" />
+            </div>
+            <div className="shimmer h-9 w-24 rounded-full" />
           </div>
-          <div className="shimmer h-3 w-9 rounded" />
-        </div>
-      ))}
-    </GlassPanel>
+        </GlassPanel>
+      )}
+      <GlassPanel className="p-2" aria-busy="true" aria-label="Loading">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex h-16 items-center gap-3.5 pl-2 pr-3">
+            <div className="shimmer h-12 w-12 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <div className="shimmer h-3.5 rounded" style={{ width: `${48 - (i % 3) * 8}%` }} />
+              <div className="shimmer h-3 w-1/4 rounded" />
+            </div>
+            <div className="shimmer h-3 w-9 rounded" />
+          </div>
+        ))}
+      </GlassPanel>
+    </div>
   );
 }
 

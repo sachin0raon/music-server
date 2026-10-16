@@ -1,5 +1,6 @@
 import { CaretDown, CaretUp, Check, DotsThree, Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
+import Chip from "./Chip";
 import EqBars from "./EqBars";
 import { IconButton } from "./Button";
 import { fmt } from "../api";
@@ -41,8 +42,8 @@ export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 
           <span className="block truncate text-small text-mute">{track.artist}{!track.owned && track.owner ? `, shared by ${track.owner}` : ""}{track.is_shared && track.owned && <span className="sm:hidden">, shared</span>}</span>
         </span>
       </button>
-      {track.is_shared && track.owned && <span className="hidden rounded-full border border-line-strong px-2.5 py-0.5 text-micro text-mute sm:inline">Shared</span>}
-      {isFolder && track.in_library && <span className="hidden rounded-full border border-line-strong px-2.5 py-0.5 text-micro text-mute sm:inline">In your library</span>}
+      {track.is_shared && track.owned && <Chip className="hidden sm:inline-flex">Shared</Chip>}
+      {isFolder && track.in_library && <Chip className="hidden sm:inline-flex">In your library</Chip>}
       <span className={`tnum w-11 text-right text-small text-mute ${onMove ? "hidden sm:block" : ""}`}>{fmt(track.duration)}</span>
       {onMove && (
         <>

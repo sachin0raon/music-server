@@ -3,12 +3,13 @@ import { IconButton } from "./Button";
 import { usePlayer } from "../state";
 
 // Same icon weight and proportions at every size: skip = fill, play = fill on an
-// accent disc. Shuffle and repeat sit at the outer edges; at the compact size they
-// only appear from sm up, where the player bar has room for five controls.
+// accent disc. Shuffle and repeat sit at the outer edges; at the compact size
+// (the mini player) they only appear from sm up, where there is room for five
+// controls, but play/pause, previous and next are always available.
 const SIZES = {
   sm: {
-    side: "!h-10 !w-10", sideIcon: 20, sideHide: "hidden sm:grid",
-    skip: "!h-10 !w-10", skipIcon: 22, prevHide: "hidden sm:grid",
+    side: "!h-10 !w-10 [@media(pointer:coarse)]:!h-11 [@media(pointer:coarse)]:!w-11", sideIcon: 20, sideHide: "hidden sm:grid",
+    skip: "!h-10 !w-10 [@media(pointer:coarse)]:!h-11 [@media(pointer:coarse)]:!w-11", skipIcon: 22, prevHide: "",
     play: "!h-11 !w-11 sm:!h-12 sm:!w-12", playIcon: 22,
     gap: "gap-1 sm:gap-3",
   },

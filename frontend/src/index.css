@@ -32,12 +32,13 @@
   --color-glow-a: #1e4f5c;
   --color-glow-b: #26407a;
 
-  /* Type scale */
-  --text-display: 2.5rem;
-  --text-display--line-height: 1.1;
+  /* Type scale. One notch tighter than before so a wide screen does not read as
+     "zoomed in": page titles 36px, secondary titles 26px. Body stays 16px. */
+  --text-display: 2.25rem;
+  --text-display--line-height: 1.15;
   --text-display--letter-spacing: -0.03em;
-  --text-title: 1.75rem;
-  --text-title--line-height: 1.2;
+  --text-title: 1.625rem;
+  --text-title--line-height: 1.25;
   --text-title--letter-spacing: -0.02em;
   --text-heading: 1.25rem;
   --text-heading--line-height: 1.3;
@@ -140,6 +141,14 @@ body {
 @media (hover: hover) {
   .btn-round[aria-pressed="true"]:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 24%, transparent); color: var(--color-accent-strong); }
 }
+
+/* ---------- Chips ----------
+   One pill for every small status/format label (rows, track details), so the
+   size, radius and weight cannot drift between screens. */
+.chip { display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 9999px; padding: 0.125rem 0.625rem; font-size: 0.75rem; line-height: 1.4; font-weight: 500; white-space: nowrap; }
+.chip-outline { border: 1px solid var(--color-line-strong); color: var(--color-mute); }
+.chip-soft { background: rgba(255, 255, 255, 0.08); color: var(--color-mute); }
+.chip-accent { background: var(--color-accent-soft); color: var(--color-accent); }
 
 /* ---------- Fields ---------- */
 .field { width: 100%; min-height: 48px; border-radius: 16px; padding: 0 1rem; font-size: 16px; color: var(--color-ink); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--color-line-strong); }

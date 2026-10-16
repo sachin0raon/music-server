@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import useFocusTrap from "./useFocusTrap";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CaretDown, DotsThree } from "@phosphor-icons/react";
+import { CaretDown, DotsThree, Queue } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
 import TrackMenu from "./TrackMenu";
+import QueueSheet from "./QueueSheet";
 import { Button, IconButton } from "./Button";
 import PlayerControls from "./PlayerControls";
 import SeekBar from "./SeekBar";
-import { api, fmt } from "../api";
+import { api, fmt, fmtBitrate, fmtHz } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
 
 export default function NowPlaying() {
@@ -16,20 +17,26 @@ export default function NowPlaying() {
   const color = useDominantColor(track);
   const reduce = useReducedMotion();
   const [menu, setMenu] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
   const [err, setErr] = useState("");
   const [importing, setImporting] = useState(false);
   const isFolder = track?.source === "folder"; // a preview from the server folder
   // With repeat all/one, the end of the list wraps, so that is what comes next.
   const upNext = queue[index + 1] ?? (repeat !== "off" && queue.length > 1 ? queue[0] : undefined);
   const { data: info } = useFetch(track && !isFolder ? `/api/tracks/${track.id}` : null);
-  const extra = info && info.id === track?.id ? [info.album, info.year, info.genre].filter(Boolean).join(" · ") : "";
+  // Guard against a stale response from the previous track while the new one loads.
+  const meta = info && info.id === track?.id ? info : null;
+  const extra = meta ? [meta.album, meta.year, meta.genre].filter(Boolean).join(" · ") : "";
+  // Technical line, from the same detail response. A folder preview carries no
+  // bitrate/sample rate, so the line just does not appear for it.
+  const specs = meta ? [fmtBitrate(meta.bitrate), fmtHz(meta.sample_rate)].filter(Boolean).join(" · ") : "";
   const root = useRef(null);
   useFocusTrap(root);
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && !menu && setOpen(false);
+    const onKey = (e) => e.key === "Escape" && !menu && !queueOpen && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menu, setOpen]);
+  }, [menu, queueOpen, setOpen]);
   if (!track) return null; // e.g. the playing track was just deleted
 
   const toggleShare = async () => {
@@ -65,21 +72,25 @@ export default function NowPlaying() {
       <div className="relative mx-auto flex min-h-full max-w-md flex-col gap-6 [@media(max-height:500px)]:gap-3 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(1.25rem+env(safe-area-inset-top))] lg:max-w-5xl">
         <div className="flex items-center justify-between">
           <IconButton label="Close player" variant="glass" onClick={() => setOpen(false)}><CaretDown size={20} /></IconButton>
-          {!isFolder && <IconButton label="More options" variant="glass" onClick={() => setMenu(true)}><DotsThree size={22} weight="bold" /></IconButton>}
+          <div className="flex items-center gap-2">
+            <IconButton label="Queue" variant="glass" onClick={() => setQueueOpen(true)}><Queue size={20} /></IconButton>
+            {!isFolder && <IconButton label="More options" variant="glass" onClick={() => setMenu(true)}><DotsThree size={22} weight="bold" /></IconButton>}
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col gap-6 [@media(max-height:500px)]:gap-3 lg:grid lg:grid-cols-2 lg:items-center lg:gap-16">
           <motion.div key={track.id} initial={{ scale: reduce ? 1 : 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", damping: 26, stiffness: 260 }} className="self-center lg:justify-self-end">
-            <Cover track={track} rounded="rounded-[28px]" className="h-[min(350px,calc(100vw-2.5rem),40dvh)] w-[min(350px,calc(100vw-2.5rem),40dvh)] shadow-float lg:h-[min(440px,62dvh)] lg:w-[min(440px,62dvh)]" />
+            <Cover track={track} rounded="rounded-[28px]" eager className="h-[min(350px,calc(100vw-2.5rem),40dvh)] w-[min(350px,calc(100vw-2.5rem),40dvh)] shadow-float lg:h-[min(440px,62dvh)] lg:w-[min(440px,62dvh)]" />
           </motion.div>
 
           <div className="flex flex-col gap-6 [@media(max-height:500px)]:gap-3 lg:max-w-md">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="truncate text-title font-semibold">{track.title}</h1>
+                <h1 className="line-clamp-2 text-title font-semibold">{track.title}</h1>
                 <p className="truncate text-body text-mute">{track.artist}</p>
                 {extra && <p className="truncate text-small text-mute">{extra}</p>}
+                {specs && <p className="tnum truncate text-small text-mute">{specs}</p>}
               </div>
               {isFolder ? (
                 track.in_library ? (
@@ -111,6 +122,7 @@ export default function NowPlaying() {
         </div>
       </div>
       <AnimatePresence>{menu && <TrackMenu key="menu" track={track} fullScreen onClose={() => setMenu(false)} />}</AnimatePresence>
+      <AnimatePresence>{queueOpen && <QueueSheet key="queue" fullScreen onClose={() => setQueueOpen(false)} />}</AnimatePresence>
     </motion.div>
   );
 }

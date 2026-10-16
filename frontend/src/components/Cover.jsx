@@ -10,18 +10,21 @@ export const toneFor = (id) => TONES[(typeof id === "number" ? id : hash(String(
 export const coverUrl = (track) =>
   track.cover_url ?? (track.has_cover ? `/api/tracks/${track.id}/cover` : null);
 
-export default function Cover({ track, className = "", rounded = "rounded-xl" }) {
+// `eager`: above-the-fold art (player, featured card, mini bar) loads at once;
+// everywhere else stays lazy so a long list does not fetch every cover.
+export default function Cover({ track, className = "", rounded = "rounded-xl", eager = false }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const src = coverUrl(track);
   const art = src && !failed;
   return (
     <div className={`relative shrink-0 overflow-hidden ${rounded} ${className}`} style={{ background: `linear-gradient(145deg, ${toneFor(track.id)}, color-mix(in srgb, ${toneFor(track.id)} 55%, #000))` }}>
-      {art ? (
-        <img src={src} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
+      {/* The note is the base layer, not a branch: a cover that is still loading
+          (or has none) shows art-like fallback instead of an empty gradient. */}
+      <div className="absolute inset-0 grid place-items-center text-white/45"><MusicNote size="38%" weight="fill" /></div>
+      {art && (
+        <img src={src} alt="" loading={eager ? "eager" : "lazy"} decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out ${loaded ? "opacity-100" : "opacity-0"}`} />
-      ) : (
-        <div className="absolute inset-0 grid place-items-center text-white/45"><MusicNote size="38%" weight="fill" /></div>
       )}
       <div className={`pointer-events-none absolute inset-0 ${rounded} ring-1 ring-inset ring-white/10`} />
     </div>

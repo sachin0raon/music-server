@@ -60,7 +60,7 @@ function Shell() {
       </aside>
 
       <div className="lg:pl-60">
-        <main id="main" tabIndex={-1} className="outline-none mx-auto max-w-[calc(42rem+2.5rem)] md:max-w-[calc(48rem+2.5rem)] xl:max-w-[calc(56rem+2.5rem)] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-48 pt-[calc(1.75rem+env(safe-area-inset-top))]">
+        <main id="main" tabIndex={-1} className="outline-none mx-auto max-w-[calc(42rem+2.5rem)] md:max-w-[calc(48rem+2.5rem)] xl:max-w-[calc(60rem+2.5rem)] 2xl:max-w-[calc(68rem+2.5rem)] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-48 pt-[calc(1.75rem+env(safe-area-inset-top))]">
           <div key={pathname} className="page-enter">
           <Routes>
             <Route path="/" element={<Library />} />
