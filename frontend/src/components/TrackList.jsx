@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Play } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
 import TrackRow from "./TrackRow";
@@ -34,7 +34,9 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
     <>
       {latest && (
         // The card is tinted from its own cover, so the list below reads as one piece with it
-        <GlassPanel as="section" className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6"
+        <GlassPanel as={motion.section} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6"
           style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.045))` }}>
           <Cover track={latest} eager className="h-[122px] w-[122px] shadow-lift sm:h-[184px] sm:w-[184px]" rounded="rounded-2xl" />
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center sm:gap-8 sm:py-0">
@@ -52,7 +54,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
         </GlassPanel>
       )}
       <GlassPanel as="ul" className="p-2">
-        {items.map((t) => <TrackRow key={t.id} track={t} list={items} onMenu={setMenu} />)}
+        {items.map((t, i) => <TrackRow key={t.id} track={t} list={items} onMenu={setMenu} index={i} />)}
       </GlassPanel>
       {error && <p role="alert" className="mt-3 text-small text-danger">{error}</p>}
       {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}

@@ -129,8 +129,8 @@ export default function FolderList({ sort, onTotal, empty }) {
       )}
 
       <GlassPanel as="ul" className="p-2">
-        {items.map((t) => (
-          <TrackRow key={t.id} track={t} list={items} source={SOURCE}
+        {items.map((t, i) => (
+          <TrackRow key={t.id} track={t} list={items} source={SOURCE} index={i}
             selectable={!t.in_library} selected={selected.has(t.id)} onSelect={toggle} />
         ))}
       </GlassPanel>

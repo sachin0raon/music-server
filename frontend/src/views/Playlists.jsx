@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Play, Playlist } from "@phosphor-icons/react";
 import TrackRow from "../components/TrackRow";
 import TrackMenu from "../components/TrackMenu";
@@ -39,14 +39,15 @@ export function PlaylistsIndex() {
         <Empty title="No playlists yet" icon={Playlist}>Name one above, then add tracks from the menu on any song.</Empty>
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
-          {data.map((p) => (
-            <li key={p.id}>
+          {data.map((p, i) => (
+            <motion.li key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: Math.min(i, 12) * 0.03 }}>
               <Link to={`/playlists/${p.id}`} className="glass interactive block rounded-card p-3 transition-transform duration-[220ms] ease-out hover:-translate-y-0.5">
                 <PlaylistArt id={p.id} className="aspect-square w-full" />
                 <span className="mt-3 block truncate text-body font-medium">{p.name}</span>
                 <span className="block text-small text-mute">{p.track_count} {p.track_count === 1 ? "track" : "tracks"}</span>
               </Link>
-            </li>
+            </motion.li>
           ))}
         </ul>
       )}
@@ -161,7 +162,7 @@ export function PlaylistDetail() {
               <p aria-live="polite" className="sr-only">{announce}</p>
               <GlassPanel as="ul" className="p-2">
                 {order.map((t, i) => (
-                  <TrackRow key={t.id} track={t} list={order} onMenu={setMenu}
+                  <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
                     onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)} />
                 ))}
               </GlassPanel>

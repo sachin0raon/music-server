@@ -146,8 +146,8 @@ export default function FolderScan() {
             </GlassPanel>
           )}
           <GlassPanel as="ul" className="p-2">
-            {items.map((t) => (
-              <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} />
+            {items.map((t, i) => (
+              <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} index={i} />
             ))}
           </GlassPanel>
         </>

@@ -1,3 +1,4 @@
+import { motion } from "motion/react";
 import { CaretUp } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import GlassPanel from "./GlassPanel";
@@ -6,12 +7,16 @@ import PlayerControls from "./PlayerControls";
 import SeekBar, { MiniProgress } from "./SeekBar";
 import { usePlayer } from "../state";
 
-export default function PlayerBar() {
-  const { track, setOpen } = usePlayer();
-  if (!track) return null;
+// `track` comes in as a prop (not from context) so AnimatePresence can finish the
+// exit animation with the last track still on screen after playback stops.
+export default function PlayerBar({ track }) {
+  const { setOpen } = usePlayer();
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:bottom-4 lg:left-60">
-      <GlassPanel level="raised" className="relative mx-auto flex max-w-2xl items-center gap-3 overflow-hidden p-2.5 pr-3 shadow-float md:max-w-3xl sm:p-3 xl:max-w-4xl">
+    <motion.div
+      className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:bottom-4 lg:left-60"
+      initial={{ y: 96, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 96, opacity: 0 }}
+      transition={{ type: "spring", damping: 30, stiffness: 320 }}>
+      <GlassPanel level="bar" className="relative mx-auto flex max-w-2xl items-center gap-3 overflow-hidden p-2.5 pr-3 shadow-float md:max-w-3xl sm:p-3 xl:max-w-4xl">
         <button onClick={() => setOpen(true)} aria-label={`Open player: ${track.title}`} className="interactive flex min-w-0 flex-1 basis-0 items-center gap-3 rounded-tile text-left sm:-m-1 sm:p-1">
           <Cover track={track} eager className="h-12 w-12 sm:h-14 sm:w-14" />
           <span className="min-w-0">
@@ -28,6 +33,6 @@ export default function PlayerBar() {
         </div>
         <MiniProgress className="sm:hidden" />
       </GlassPanel>
-    </div>
+    </motion.div>
   );
 }

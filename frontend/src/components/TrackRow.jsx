@@ -1,3 +1,4 @@
+import { motion } from "motion/react";
 import { CaretDown, CaretUp, Check, DotsThree, Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
@@ -12,14 +13,16 @@ import { usePlayer } from "../state";
 // `selectable`/`selected`/`onSelect` add a checkbox for multi-select importing.
 // A folder row (track.source === "folder") has no library menu: nothing to share,
 // delete or file away until it is imported.
-export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 0, rowRef,
+export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 0, rowRef, index = 0,
   source = null, selectable = false, selected = false, onSelect }) {
   const { track: current, playing, playTrack } = usePlayer();
   const active = current?.id === track.id;
   const eq = active && playing;
   const isFolder = track.source === "folder";
   return (
-    <li ref={rowRef} className={`group relative flex items-center gap-1 rounded-tile pr-1 transition-colors duration-[160ms] ${active ? "bg-accent-soft" : selected ? "bg-white/[0.07]" : "hover:bg-white/[0.06] focus-within:bg-white/[0.06]"}`}>
+    <motion.li ref={rowRef} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 12) * 0.022 }}
+      className={`group relative flex items-center gap-1 rounded-tile pr-1 transition-colors duration-[160ms] ${active ? "bg-accent-soft" : selected ? "bg-white/[0.07]" : "hover:bg-white/[0.06] focus-within:bg-white/[0.06]"}`}>
       {selectable && (
         <button type="button" role="checkbox" aria-checked={selected} aria-label={`Select ${track.title}`}
           onClick={() => onSelect?.(track)} className="grid min-h-[64px] place-items-center pl-3 pr-1">
@@ -54,6 +57,6 @@ export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 
         </>
       )}
       {!isFolder && <IconButton label={`More options for ${track.title}`} onClick={() => onMenu(track)} className="text-mute"><DotsThree size={24} weight="bold" /></IconButton>}
-    </li>
+    </motion.li>
   );
 }
