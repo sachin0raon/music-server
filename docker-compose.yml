@@ -11,8 +11,9 @@ services:
       # - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/data         # Audio files: users/<id>/ private files, shared/ shared files
-      # Optional: an existing music folder to import from (read-only, never modified)
-      # - /path/to/your/music:/music:ro
+      # Optional: a folder of existing music to scan on demand (read-only, never modified).
+      # Point the left side at your music folder and set MUSIC_DIR=/music in .env:
+      # - /mnt/storage/music:/music:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets MYSQL_HOST=host.docker.internal reach MySQL on the Docker host
     healthcheck:

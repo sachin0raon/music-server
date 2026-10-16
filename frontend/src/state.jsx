@@ -107,6 +107,7 @@ export function PlayerProvider({ children }) {
   const shuffleRef = useRef(shuffle);
   const repeatRef = useRef(repeat); // read inside `next`, which must keep a stable identity
   const origOrder = useRef(null); // track ids in the pre-shuffle order; null while shuffle is off
+  const queueSource = useRef(null); // the list that started this queue, so it can follow its reorders
   qRef.current = queue;
   iRef.current = index;
   shuffleRef.current = shuffle;
@@ -164,10 +165,11 @@ export function PlayerProvider({ children }) {
     a.play().catch(() => setPlaying(false));
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); setShuffle(false); setRepeat("off"); origOrder.current = null; } }, [user]);
+  useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); setShuffle(false); setRepeat("off"); origOrder.current = null; queueSource.current = null; } }, [user]);
 
-  const playTrack = useCallback((t, list) => {
+  const playTrack = useCallback((t, list, source = null) => {
     failures.current = 0;
+    queueSource.current = source; // remember where the queue came from (e.g. a playlist)
     if (shuffleRef.current) {
       // Shuffled run starting from the tapped track. The pre-shuffle order is
       // remembered so turning shuffle off can put it back.
@@ -210,6 +212,28 @@ export function PlayerProvider({ children }) {
     setShuffle(false);
   }, []);
 
+  // The list that started this queue was reordered (the playlist up/down buttons).
+  // If this queue is that same list, move it to match, keeping the current track
+  // playing. Any other list's reorder leaves us alone.
+  const reorderQueue = useCallback((source, ids) => {
+    const q = qRef.current, s = queueSource.current;
+    if (!q.length || !source || !s || s.type !== source.type || s.id !== source.id) return;
+    if (shuffleRef.current) {
+      // Playback is already random, so only the remembered order changes: turning
+      // shuffle off will now restore the new order.
+      if (origOrder.current) {
+        const live = new Set(q.map((t) => t.id));
+        origOrder.current = ids.filter((id) => live.has(id));
+      }
+      return;
+    }
+    const ordered = restoreOrder(ids, q); // same rule as turning shuffle off: new order, extras last
+    if (!ordered.length) return;
+    const at = ordered.findIndex((t) => t.id === q[iRef.current]?.id);
+    setQueue(ordered);
+    setIndex(at < 0 ? 0 : at);
+  }, []);
+
   const cycleRepeat = useCallback(() => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")), []);
 
   const toggle = useCallback(() => {
@@ -234,9 +258,9 @@ export function PlayerProvider({ children }) {
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
     track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
-    shuffle, repeat, toggleShuffle, cycleRepeat, canNext,
+    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue,
   }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack,
-       shuffle, repeat, toggleShuffle, cycleRepeat, canNext]);
+       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
   return (

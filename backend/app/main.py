@@ -8,6 +8,7 @@ from sqlalchemy import text
 from .config import settings
 from .db import engine
 from .auth import admin_router, router as auth_router
+from .library import router as library_router
 from .models import Base
 from .playlists import router as playlists_router
 from .schema import ensure_columns
@@ -41,6 +42,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(tracks_router)
 app.include_router(playlists_router)
+app.include_router(library_router)
 
 
 @app.on_event("startup")

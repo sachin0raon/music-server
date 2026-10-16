@@ -125,6 +125,8 @@ All settings are environment variables, normally set in `.env`.
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address of your reverse proxy, as the container sees it. Only it is trusted to say who the real client is. See [Nginx Proxy Manager](#nginx-proxy-manager) |
 | `SESSION_DAYS` | `30` | How long a login lasts |
 | `MAX_UPLOAD_MB` | `200` | Largest single file accepted by the web upload. Keep Nginx Proxy Manager's limit at least this large |
+| `MAX_IMPORT_MB` | `4096` | Size limit for imported files: the folder scan and "Add from a link". The upload limit does not apply to these |
+| `MUSIC_DIR` | unset | Folder of existing music to scan on demand (mounted read-only, e.g. `/music`). Unset hides the scan feature |
 | `DATA_DIR` | `/data` | Where files are stored inside the container (mounted from `./data`) |
 | `STATIC_DIR` | `/app/static` | The built web app. You normally never change this |
 
@@ -307,6 +309,8 @@ Files are stored under server-generated names, never the original file name, so 
 
 For music you already have on the machine. Files are **copied** into the server's own storage, so the music uses disk space twice. Your folder is mounted read-only and is never changed.
 
+You can also do this from the app: open **Upload** and use **Scan the server's music folder**. Any signed-in user can scan; each gets their own private copies, and files they already have are skipped. The command below does the same job without opening the app, and is handy for very large folders.
+
 1. In `docker-compose.yml`, uncomment the `/music:ro` volume and set the left side to your folder, for example:
 
    ```yaml
@@ -333,6 +337,10 @@ How it behaves:
 - Imported tracks are private to that user until shared.
 - Each user can import the same folder into their own library and gets their own private copies.
 - A large folder takes a while, since each file is hashed, read and copied.
+
+### Adding a track from a link
+
+**Upload → Add from a link** fetches a direct link to an audio file and adds it to your library. Any signed-in user can use it. The link must be `http` or `https` and point to a public address; links that point at the server itself, the local network or cloud metadata addresses are refused. The file is copied into your own storage, so the same link added twice is a duplicate.
 
 ---
 
@@ -429,6 +437,7 @@ All endpoints except register, login and health need a signed-in session. Intera
 | `GET /api/admin/users` | List users (admin) |
 | `POST /api/admin/users/{id}/reset-password` | Reset a password (admin) |
 | `POST /api/tracks` | Upload one or more files (form field `files`) |
+| `POST /api/tracks/from-url` with `{"url": "..."}` | Fetch a link and add the file to your library |
 | `GET /api/tracks?scope=mine\|shared\|all&q=&sort=&limit=&offset=` | List and search. `sort` is `added_desc` (default), `added_asc`, `title_asc` or `title_desc` |
 | `GET /api/tracks/{id}` | Track details, including audio metadata (bitrate, sample rate, channels, format, year, genre, track and disc number, composer, file size) |
 | `GET /api/tracks/{id}/stream` | Audio, with range support |
@@ -440,6 +449,9 @@ All endpoints except register, login and health need a signed-in session. Intera
 | `POST /api/playlists/{id}/tracks` with `{"track_id": n}` | Add a track |
 | `DELETE /api/playlists/{id}/tracks/{track_id}` | Remove a track |
 | `PUT /api/playlists/{id}/order` with `{"track_ids": [n, ...]}` | Save the play order (all visible tracks of the playlist, in order) |
+| `GET /api/library/source` | The scan folder the server was given, and whether it is reachable |
+| `GET /api/library/scan` | Your latest folder scan, with counts and per-file results |
+| `POST /api/library/scan` | Start scanning the folder; it runs in the background |
 
 ---
 
@@ -474,6 +486,8 @@ New tables and columns are created automatically on startup, so restarting is al
 | "Too many attempts" | The rate limit was hit. Wait 15 minutes, or restart the container |
 | Import says "Not a folder" | The folder is not mounted into the container. Check the `/music:ro` line in `docker-compose.yml` |
 | Import says "No such user" | Register that account in the app first |
+| The scan says the folder is not mounted | `MUSIC_DIR` is not there inside the container. Set the matching volume in `docker-compose.yml` (e.g. `- /mnt/storage/music:/music:ro`) and set `MUSIC_DIR=/music` |
+| "Add from a link" refuses a link | The link must be `http`/`https` and public. Links to local or private addresses are blocked on purpose |
 | Playback does not start on a phone | Browsers require a tap to start audio. Tap the play button |
 | No Install option appears | Needs HTTPS, and the app must not already be installed. On iPhone use Share, then Add to Home Screen. Some browsers only offer it after you have used the site for a moment |
 | An old version keeps showing | Close and reopen the app. If it persists, do a hard refresh or clear the site's data once. The service worker is always rechecked, so this is rare |

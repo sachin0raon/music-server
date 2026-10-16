@@ -1,8 +1,14 @@
 import base64
 import hashlib
+import http.client
+import ipaddress
 import logging
 import os
 import secrets
+import socket
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,7 +16,7 @@ import mutagen
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from mutagen.flac import Picture
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -20,6 +26,7 @@ from .auth import current_user
 from .config import settings
 from .db import get_db
 from .models import PlaylistTrack, Track, User
+from .ratelimit import RateLimiter
 
 log = logging.getLogger("tracks")
 router = APIRouter(prefix="/api/tracks", tags=["tracks"])
@@ -51,16 +58,35 @@ def track_out(t: Track, me_id: int | None = None, owner: str | None = None, deta
 
 # ---------- helpers ----------
 
-def _save_temp(upload: UploadFile, dest: Path) -> tuple[int, str]:
+class FileUpload:
+    """Looks like an uploaded file to the processing pipeline.
+
+    Lets a plain file handle (the folder scan, the CLI) or a network response
+    (the link import) go through the exact same pipeline as a browser upload."""
+    def __init__(self, filename: str, file):
+        self.filename = filename
+        self.file = file
+
+
+def walk_files(root: Path):
+    """Every non-hidden file under root, in a stable order. Hidden folders and files
+    (names starting with a dot) are skipped."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for name in sorted(filenames):
+            if not name.startswith("."):
+                yield Path(dirpath) / name
+
+
+def _save_temp(upload: UploadFile, dest: Path, limit_bytes: int) -> tuple[int, str]:
     """Copy to a temp file in chunks, hashing and enforcing the size limit."""
-    limit = settings.max_upload_mb * 1024 * 1024
     h, size = hashlib.sha256(), 0
     dest.parent.mkdir(parents=True, exist_ok=True)
     with open(dest, "wb") as out:
         while chunk := upload.file.read(CHUNK):
             size += len(chunk)
-            if size > limit:
-                raise ValueError(f"File too large (max {settings.max_upload_mb} MB)")
+            if size > limit_bytes:
+                raise ValueError(f"File too large (max {limit_bytes // (1024 * 1024)} MB)")
             h.update(chunk)
             out.write(chunk)
     return size, h.hexdigest()
@@ -174,17 +200,18 @@ def _result(name: str, status: str, detail: str | None = None, track: Track | No
 
 # ---------- one file ----------
 
-def _process(upload: UploadFile, user: User, db: DbSession) -> dict:
+def _process(upload: UploadFile, user: User, db: DbSession, max_bytes: int | None = None) -> dict:
     name = (Path(upload.filename or "").name or "unnamed")[:255]
     ext = Path(name).suffix.lower()
     if ext not in ALLOWED_EXT:
         return _result(name, "error", "Unsupported file type")
 
+    limit = settings.max_upload_mb * 1024 * 1024 if max_bytes is None else max_bytes
     tmp = settings.data_dir / "tmp" / f"{secrets.token_hex(16)}{ext}"
     final = cover_final = None
     committed = False
     try:
-        size, digest = _save_temp(upload, tmp)
+        size, digest = _save_temp(upload, tmp, limit)
         if size == 0:
             return _result(name, "error", "Empty file")
         if db.scalar(select(Track.id).where(Track.owner_id == user.id, Track.content_hash == digest)):
@@ -249,6 +276,133 @@ def upload_tracks(
 ):
     """Each file gets its own result, so one bad file never fails the batch."""
     return {"results": [_process(f, user, db) for f in files]}
+
+
+# ---------- import from a link ----------
+# The server fetches a URL the user gives us and adds the file to their library.
+# The link is validated first so this can't be turned into a way to reach the
+# server itself, the local network, or cloud metadata addresses.
+
+FETCH_TIMEOUT = 30      # seconds a single request may take
+MAX_REDIRECTS = 3
+_url_limiter = RateLimiter(limit=30, window_seconds=3600)  # per user, per hour
+
+# Content-Type -> extension, for links whose URL path carries no usable extension
+CONTENT_TYPE_EXT = {
+    "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/x-mpeg": ".mp3",
+    "audio/flac": ".flac", "audio/x-flac": ".flac",
+    "audio/mp4": ".m4a", "audio/x-m4a": ".m4a", "audio/aac": ".m4a", "audio/x-aac": ".m4a",
+    "audio/ogg": ".ogg", "application/ogg": ".ogg", "audio/vorbis": ".ogg",
+    "audio/opus": ".opus",
+    "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/wave": ".wav",
+}
+
+
+class _BlockedLink(ValueError):
+    """A link we refuse to follow. The message is safe to show the user."""
+
+
+def _local_address(ip: str) -> bool:
+    addr = ipaddress.ip_address(ip)
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped  # ::ffff:127.0.0.1 and the like
+    return (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_multicast
+            or addr.is_reserved or addr.is_unspecified)
+
+
+def _check_host(host: str, port: int) -> None:
+    """Refuse hosts that resolve to a private, loopback or otherwise local address."""
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        raise _BlockedLink("Could not find that host")
+    if not infos or any(_local_address(info[4][0]) for info in infos):
+        raise _BlockedLink("That address is not allowed")
+
+
+def _check_link(url: str) -> None:
+    parts = urllib.parse.urlsplit(url.strip())
+    if parts.scheme not in ("http", "https"):
+        raise _BlockedLink("Only http and https links are allowed")
+    if not parts.hostname:
+        raise _BlockedLink("That link is missing a host")
+    if parts.username or parts.password:
+        raise _BlockedLink("Links that carry a username or password are not allowed")
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        raise _BlockedLink("That link is not a valid address")
+    _check_host(parts.hostname, port)
+
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """Re-checks every redirect target, so a safe link can't hop to an internal one."""
+    max_redirections = MAX_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _check_link(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _link_filename(parts, content_type: str) -> str | None:
+    """A name the pipeline can trust: the URL's own extension wins, otherwise the
+    Content-Type decides. None means the link is not a file we can store."""
+    base = Path(urllib.parse.unquote(parts.path)).name or "download"
+    if Path(base).suffix.lower() in ALLOWED_EXT:
+        return base[:255]
+    ext = CONTENT_TYPE_EXT.get(content_type)
+    if ext:
+        return (Path(base).stem or "download")[:250] + ext
+    return None
+
+
+def _name_hint(url: str) -> str:
+    """A readable label for a result, used even when the link is rejected."""
+    base = Path(urllib.parse.unquote(urllib.parse.urlsplit(url).path)).name
+    return base[:255] or "link"
+
+
+def _open_link(url: str):
+    """Validate the link and return (filename, open response). Raises ValueError with a
+    message that is safe to show the user."""
+    _check_link(url)
+    req = urllib.request.Request(url.strip(), headers={"User-Agent": "music-server", "Accept": "audio/*;q=0.9,*/*;q=0.5"})
+    try:
+        resp = urllib.request.build_opener(_SafeRedirect()).open(req, timeout=FETCH_TIMEOUT)
+    except urllib.error.HTTPError as exc:
+        raise ValueError(f"The server replied with {exc.code} for that link")
+    except (urllib.error.URLError, OSError, http.client.HTTPException):
+        # URLError covers connection problems; HTTPException covers a URL the HTTP layer rejects
+        raise ValueError("Could not reach that link")
+    declared = resp.headers.get("Content-Length")
+    if declared and declared.isdigit() and int(declared) > settings.max_import_mb * 1024 * 1024:
+        resp.close()
+        raise ValueError(f"File too large (max {settings.max_import_mb} MB)")
+    content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    name = _link_filename(urllib.parse.urlsplit(url.strip()), content_type)
+    if name is None:
+        resp.close()
+        raise ValueError("That link does not point to a supported audio file")
+    return name, resp
+
+
+class UrlBody(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+@router.post("/from-url")
+def import_from_url(body: UrlBody, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Add a track by fetching a link the user gives us. Any signed-in user may use it."""
+    _url_limiter.check(f"url:{user.id}")
+    _url_limiter.hit(f"url:{user.id}")
+    try:
+        name, resp = _open_link(body.url)
+    except ValueError as exc:
+        return _result(_name_hint(body.url), "error", str(exc))
+    try:
+        return _process(FileUpload(name, resp), user, db, max_bytes=settings.max_import_mb * 1024 * 1024)
+    finally:
+        resp.close()
 
 
 # ---------- library ----------

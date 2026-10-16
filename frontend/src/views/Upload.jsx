@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Check, UploadSimple, WarningCircle } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
+import LinkImport from "../components/LinkImport";
+import FolderScan from "../components/FolderScan";
 import { Button } from "../components/Button";
 import { uploadFile } from "../api";
 import { useData } from "../state";
@@ -52,6 +54,9 @@ export default function Upload() {
         <input ref={input} type="file" multiple accept=".mp3,.flac,.m4a,.ogg,.opus,.wav,audio/*" className="hidden"
           onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </GlassPanel>
+
+      <LinkImport />
+      <FolderScan />
 
       {files.length > 0 && (
         <GlassPanel as="ul" className="mt-5 px-4" aria-live="polite">

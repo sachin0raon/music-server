@@ -8,7 +8,6 @@
 """
 import argparse
 import getpass
-import os
 import sys
 from pathlib import Path
 
@@ -20,7 +19,7 @@ from .models import Session as LoginSession
 from .models import Track, User
 from .schema import ensure_columns
 from .security import hash_password
-from .tracks import ALLOWED_EXT, _process, _read_meta
+from .tracks import ALLOWED_EXT, FileUpload, _process, _read_meta, walk_files
 
 
 # ---------- migrate ----------
@@ -133,21 +132,6 @@ def make_admin(username: str) -> int:
 
 # ---------- import ----------
 
-class _FileUpload:
-    """Looks enough like an uploaded file for the normal upload pipeline to process it."""
-    def __init__(self, name: str, fh):
-        self.filename = name
-        self.file = fh
-
-
-def _walk(root: Path):
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))  # skip hidden folders
-        for name in sorted(filenames):
-            if not name.startswith("."):
-                yield Path(dirpath) / name
-
-
 def import_music(username: str, folder: str, dry_run: bool = False) -> int:
     root = Path(folder)
     if not root.is_dir():
@@ -161,7 +145,7 @@ def import_music(username: str, folder: str, dry_run: bool = False) -> int:
             print(f"No such user: {username}. Register the account in the app first.")
             return 1
 
-        everything = list(_walk(root))
+        everything = list(walk_files(root))
         audio = [p for p in everything if p.suffix.lower() in ALLOWED_EXT]
         print(f"Found {len(audio)} audio files in {root} ({len(everything) - len(audio)} other files ignored).")
         if dry_run or not audio:
@@ -169,7 +153,7 @@ def import_music(username: str, folder: str, dry_run: bool = False) -> int:
                 print("Dry run: nothing was imported.")
             return 0
 
-        settings.max_upload_mb = 4096  # the web upload limit doesn't apply to imports
+        limit = settings.max_import_mb * 1024 * 1024  # the web upload limit does not apply to imports
         counts = {"ok": 0, "duplicate": 0, "error": 0}
         failures = []
         try:
@@ -177,7 +161,7 @@ def import_music(username: str, folder: str, dry_run: bool = False) -> int:
                 rel = path.relative_to(root)
                 try:
                     with open(path, "rb") as fh:
-                        res = _process(_FileUpload(path.name, fh), user, db)
+                        res = _process(FileUpload(path.name, fh), user, db, max_bytes=limit)
                 except OSError as exc:
                     res = {"status": "error", "detail": exc.strerror or str(exc)}
                 counts[res["status"]] += 1

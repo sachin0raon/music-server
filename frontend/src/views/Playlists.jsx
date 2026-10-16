@@ -58,8 +58,9 @@ export function PlaylistDetail() {
   const { id } = useParams();
   const { data, loading, error, reload } = useFetch(`/api/playlists/${id}`);
   const { bump } = useData();
-  const { playTrack } = usePlayer();
+  const { playTrack, reorderQueue } = usePlayer();
   const navigate = useNavigate();
+  const source = { type: "playlist", id }; // tags this playlist's queue, so reorders follow it
   const [menu, setMenu] = useState(null);
   const [mode, setMode] = useState(null); // "rename" | "delete"
   const [name, setName] = useState("");
@@ -107,17 +108,19 @@ export function PlaylistDetail() {
     const next = order.slice();
     [next[from], next[to]] = [next[to], next[from]];
     const moved = next[to];
+    const before = order.map((t) => t.id);
+    const ids = next.map((t) => t.id);
     setErr("");
     pendingFocus.current = { id: moved.id, dir: delta < 0 ? "up" : "down" };
     setOrder(next);
     setAnnounce(`Moved ${moved.title} to position ${to + 1} of ${next.length}.`);
-    const ids = next.map((t) => t.id);
+    reorderQueue(source, ids); // if this playlist is playing, move it too
     latestIds.current = ids;
     saveQueue.current = saveQueue.current
       .then(() => api.put(`/api/playlists/${id}/order`, { track_ids: ids }))
       // A newer move already set the order; only settle on this response if it is still the latest.
       .then((updated) => { if (latestIds.current === ids) setOrder(updated.tracks); })
-      .catch((e) => { if (latestIds.current === ids) { setErr(e.message); reload(); } });
+      .catch((e) => { if (latestIds.current === ids) { setErr(e.message); reorderQueue(source, before); reload(); } });
   };
 
   return (
@@ -134,7 +137,7 @@ export function PlaylistDetail() {
             </div>
           </div>
           <div className="mb-5 flex flex-wrap gap-2">
-            {order.length > 0 && <Button variant="accent" onClick={() => playTrack(order[0], order)}><Play weight="fill" size={16} />Play</Button>}
+            {order.length > 0 && <Button variant="accent" onClick={() => playTrack(order[0], order, source)}><Play weight="fill" size={16} />Play</Button>}
             <Button onClick={() => { setName(data.name); setMode("rename"); }}>Rename</Button>
             <Button onClick={() => setMode("delete")}>Delete</Button>
           </div>

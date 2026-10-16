@@ -17,6 +17,11 @@ def _required(name: str) -> str:
     return value
 
 
+def _optional_path(name: str) -> Path | None:
+    value = os.getenv(name)
+    return Path(value) if value else None
+
+
 class Settings:
     # MySQL, reached by host and port
     mysql_host: str = _required("MYSQL_HOST")
@@ -36,6 +41,13 @@ class Settings:
 
     # Upload limit in MB (keep in sync with Nginx Proxy Manager)
     max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "200"))
+
+    # Folder of existing music to scan on demand. Mounted read-only; files are copied in,
+    # never modified. Unset means the folder scan is off.
+    music_dir: Path | None = _optional_path("MUSIC_DIR")
+    # Size limit in MB for imported files (folder scan and link import). The web upload limit
+    # does not apply to these; keep it sensible because each file is read and copied.
+    max_import_mb: int = int(os.getenv("MAX_IMPORT_MB", "4096"))
 
     # Built frontend, served by the backend
     static_dir: Path = Path(os.getenv("STATIC_DIR", "/app/static"))
