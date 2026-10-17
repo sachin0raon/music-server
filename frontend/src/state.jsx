@@ -89,6 +89,14 @@ const TimeCtx = createContext({ time: 0, duration: 0 });
 export const usePlayer = () => useContext(PlayerCtx);
 export const useTime = () => useContext(TimeCtx);
 
+// Volume is a property of the device, not the account, so it lives in localStorage.
+const VOLUME_KEY = "player.volume";
+const MUTE_KEY = "player.muted";
+const readStore = (key, fallback) => {
+  try { const raw = localStorage.getItem(key); return raw === null ? fallback : JSON.parse(raw); }
+  catch { return fallback; }
+};
+
 export function PlayerProvider({ children }) {
   const { user } = useAuth();
   const audioRef = useRef(null);
@@ -101,8 +109,14 @@ export function PlayerProvider({ children }) {
   const [open, setOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState("off"); // "off" | "all" | "one"
+  const [volume, setVolumeState] = useState(() => {
+    const v = readStore(VOLUME_KEY, 1);
+    return typeof v === "number" && v >= 0 && v <= 1 ? v : 1;
+  });
+  const [muted, setMuted] = useState(() => readStore(MUTE_KEY, false) === true);
   const qRef = useRef(queue);
   const failures = useRef(0); // consecutive playback errors
+  const lastVolume = useRef(volume || 1); // the last audible level, to restore after muting
   const iRef = useRef(index);
   const shuffleRef = useRef(shuffle);
   const repeatRef = useRef(repeat); // read inside `next`, which must keep a stable identity
@@ -164,6 +178,17 @@ export function PlayerProvider({ children }) {
     setDuration(track.duration || 0);
     a.play().catch(() => setPlaying(false));
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply the chosen level to the element; this also restores it on first mount,
+  // so a persisted volume is in place before the first play.
+  useEffect(() => { const a = audioRef.current; if (a) a.volume = muted ? 0 : volume; }, [volume, muted]);
+  useEffect(() => { if (volume > 0) lastVolume.current = volume; }, [volume]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(VOLUME_KEY, JSON.stringify(volume));
+      localStorage.setItem(MUTE_KEY, JSON.stringify(muted));
+    } catch { /* storage disabled: keep the level for this session only */ }
+  }, [volume, muted]);
 
   useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); setShuffle(false); setRepeat("off"); origOrder.current = null; queueSource.current = null; } }, [user]);
 
@@ -266,6 +291,21 @@ export function PlayerProvider({ children }) {
   const play = useCallback(() => { audioRef.current.play().catch(() => {}); }, []);
   const pause = useCallback(() => audioRef.current.pause(), []);
   const seek = useCallback((t) => { audioRef.current.currentTime = t; setTime(t); }, []);
+  // Volume is stored on the audio element's own 0..1 scale; dragging off zero unmutes.
+  const setVolume = useCallback((v) => {
+    const nv = Math.max(0, Math.min(1, v));
+    setVolumeState(nv);
+    if (nv > 0) setMuted(false);
+  }, []);
+  // Silence is mute or a slider at 0; unmuting from 0 restores the last audible level.
+  const toggleMute = useCallback(() => {
+    if (muted || volume === 0) {
+      setMuted(false);
+      if (volume === 0) setVolumeState(lastVolume.current || 1);
+    } else {
+      setMuted(true);
+    }
+  }, [muted, volume]);
   const patchTrack = useCallback((id, patch) => setQueue((q) => q.map((t) => (t.id === id ? { ...t, ...patch } : t))), []);
   const dropTrack = useCallback((id) => {
     const q = qRef.current, ix = iRef.current, i = q.findIndex((t) => t.id === id);
@@ -280,9 +320,9 @@ export function PlayerProvider({ children }) {
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
     track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
-    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue,
+    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, volume, muted, setVolume, toggleMute,
   }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
-       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue]);
+       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, volume, muted, setVolume, toggleMute]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
   return (

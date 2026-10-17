@@ -182,8 +182,9 @@ body {
 
 }
 
-/* ---------- Seek slider ----------
-   --p is the filled percentage, set inline by the player. */
+/* ---------- Range sliders (seek, volume) ----------
+   --p is the filled percentage, set inline by the player. The class is `.seek`
+   but is shared: the volume control reuses it so both sliders cannot drift. */
 /* The handle is always visible (Direction A): a bar that hides its thumb reads as
    a hairline. The track is 5px and thickens on hover; touch gets a 44px hit area. */
 input[type="range"].seek { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; background: transparent; cursor: pointer; }
