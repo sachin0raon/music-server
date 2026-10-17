@@ -3,13 +3,13 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import TrackList from "../components/TrackList";
 import PageHeader from "../components/PageHeader";
 import Field from "../components/Field";
-import SortSelect from "../components/SortSelect";
+import SortSelect, { getSavedSort } from "../components/SortSelect";
 import { Empty } from "../components/States";
 
 export default function Search() {
   const [text, setText] = useState("");
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState("added_desc");
+  const [sort, setSort] = useState(() => getSavedSort("added_desc"));
   useEffect(() => { const t = setTimeout(() => setQ(text.trim()), 250); return () => clearTimeout(t); }, [text]);
   return (
     <>

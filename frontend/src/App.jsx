@@ -27,8 +27,8 @@ function Ambient() {
   const color = useDominantColor(track);
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-      <div className="absolute -left-28 -top-24 h-[420px] w-[420px] rounded-full opacity-60 blur-[90px] transition-colors duration-1000" style={{ background: track ? color : "var(--color-glow-a)" }} />
-      <div className="absolute -right-36 top-[45%] h-[320px] w-[320px] rounded-full bg-glow-b opacity-45 blur-[90px]" />
+      <div className="absolute -left-10 -top-20 h-[460px] w-[460px] rounded-full opacity-75 blur-[90px] transition-colors duration-1000" style={{ background: track ? color : "var(--color-glow-a)" }} />
+      <div className="absolute -right-36 bottom-0 h-[340px] w-[340px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
     </div>
   );
 }

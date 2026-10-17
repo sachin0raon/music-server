@@ -1,3 +1,4 @@
+import { motion } from "motion/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
 import { Skeleton, ErrorBox } from "./States";
@@ -24,21 +25,25 @@ function Row({ label, children }) {
   );
 }
 
-// The full metadata grid, given a detail object from GET /api/tracks/{id}.
+// The full metadata grid, given a detail object from GET /api/tracks/{id} or /api/library/file/{token}.
 // Missing values show a dash instead of an empty or hidden row.
 export function TrackDetails({ track }) {
   const num = (n) => (n === null || n === undefined ? null : String(n));
   return (
-    <div>
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: "easeOut" }}>
       <div className="mb-5 flex items-center gap-4">
         <Cover track={track} className="h-20 w-20" rounded="rounded-2xl" />
         <div className="min-w-0">
           <p className="truncate text-heading font-semibold">{track.title}</p>
           <p className="truncate text-small text-mute">{track.artist}</p>
           <p className="mt-1.5 flex flex-wrap gap-1.5">
-            {track.owned
-              ? <Chip variant={track.is_shared ? "accent" : "soft"}>{track.is_shared ? "Shared" : "Private"}</Chip>
-              : track.owner && <Chip variant="soft">Shared by {track.owner}</Chip>}
+            {track.source === "folder" ? (
+              <Chip variant="soft">{track.in_library ? "In your library" : "Server file"}</Chip>
+            ) : track.owned ? (
+              <Chip variant={track.is_shared ? "accent" : "soft"}>{track.is_shared ? "Shared" : "Private"}</Chip>
+            ) : track.owner && (
+              <Chip variant="soft">Shared by {track.owner}</Chip>
+            )}
             {track.format && <Chip variant="soft">{track.format}</Chip>}
           </p>
         </div>
@@ -58,14 +63,19 @@ export function TrackDetails({ track }) {
         <Row label="File size">{fmtSize(track.file_size)}</Row>
         <Row label="Added">{fmtDate(track.created_at)}</Row>
       </dl>
-    </div>
+    </motion.div>
   );
 }
 
 // Fetches the detail for one track id and renders the grid with loading/error states
-export default function TrackDetailsLoader({ trackId }) {
-  const { data, loading, error, reload } = useFetch(trackId ? `/api/tracks/${trackId}` : null);
-  if (loading) return <Skeleton rows={4} />;
-  if (error || !data) return <ErrorBox message={error || "Track not found"} onRetry={reload} />;
-  return <TrackDetails track={data} />;
+export default function TrackDetailsLoader({ trackId, track: initialTrack }) {
+  const isFolder = initialTrack?.source === "folder";
+  const url = isFolder ? `/api/library/file/${trackId}` : (trackId ? `/api/tracks/${trackId}` : null);
+  const ready = initialTrack && (initialTrack.bitrate !== undefined || initialTrack.format !== undefined);
+  const { data, loading, error, reload } = useFetch(!ready ? url : null);
+  const track = ready ? initialTrack : data;
+  if (loading && !track) return <Skeleton rows={4} />;
+  if (error && !track) return <ErrorBox message={error || "Track not found"} onRetry={reload} />;
+  if (!track) return null;
+  return <TrackDetails track={track} />;
 }

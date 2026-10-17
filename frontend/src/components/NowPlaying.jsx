@@ -26,10 +26,9 @@ export default function NowPlaying() {
   const upNext = queue[index + 1] ?? (repeat !== "off" && queue.length > 1 ? queue[0] : undefined);
   const { data: info } = useFetch(track && !isFolder ? `/api/tracks/${track.id}` : null);
   // Guard against a stale response from the previous track while the new one loads.
-  const meta = info && info.id === track?.id ? info : null;
+  // When playing from the server folder, track already carries full extracted metadata.
+  const meta = isFolder ? track : (info && info.id === track?.id ? info : null);
   const extra = meta ? [meta.album, meta.year, meta.genre].filter(Boolean).join(" · ") : "";
-  // Technical line, from the same detail response. A folder preview carries no
-  // bitrate/sample rate, so the line just does not appear for it.
   const specs = meta ? [fmtBitrate(meta.bitrate), fmtHz(meta.sample_rate)].filter(Boolean).join(" · ") : "";
   const root = useRef(null);
   useFocusTrap(root);
@@ -78,7 +77,7 @@ export default function NowPlaying() {
             <IconButton label="Close player" variant="glass" onClick={() => setOpen(false)}><CaretDown size={20} /></IconButton>
             <div className="flex items-center gap-2">
               <IconButton label="Queue" variant="glass" onClick={() => setQueueOpen(true)}><Queue size={20} /></IconButton>
-              {!isFolder && <IconButton label="More options" variant="glass" onClick={() => setMenu(true)}><DotsThree size={22} weight="bold" /></IconButton>}
+              <IconButton label="More options" variant="glass" onClick={() => setMenu(true)}><DotsThree size={22} weight="bold" /></IconButton>
             </div>
           </div>
 

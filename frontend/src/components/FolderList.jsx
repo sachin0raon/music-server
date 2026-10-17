@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { ArrowsClockwise, FolderOpen, MagnifyingGlass } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
+import TrackMenu from "./TrackMenu";
 import ImportResults from "./ImportResults";
 import { Button, IconButton } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
@@ -25,6 +27,7 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
   const [selected, setSelected] = useState(() => new Set());
   const [importing, setImporting] = useState(false);
   const [results, setResults] = useState(null);
+  const [menuTrack, setMenuTrack] = useState(null);
   const gen = useRef(0); // bumped on every refresh, so a late "Show more" response is dropped
 
   const page = (offset) => {
@@ -146,7 +149,7 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
       <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
         {items.map((t, i) => (
           <TrackRow key={t.id} track={t} list={items} source={SOURCE} index={i}
-            selectable={!t.in_library} selected={selected.has(t.id)} onSelect={toggle} />
+            selectable={!t.in_library} selected={selected.has(t.id)} onSelect={toggle} onMenu={setMenuTrack} />
         ))}
       </GlassPanel>
 
@@ -154,6 +157,7 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
       {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}
 
       {results && <ImportResults items={results} />}
+      <AnimatePresence>{menuTrack && <TrackMenu key="menu" track={menuTrack} onClose={() => setMenuTrack(null)} />}</AnimatePresence>
     </>
   );
 }

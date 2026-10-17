@@ -24,8 +24,8 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
                 <span className="tnum w-6 shrink-0 text-right text-small text-mute">{i + 1}</span>
                 <Cover track={t} className="h-10 w-10" />
                 <span className="min-w-0 flex-1">
-                  <span className={`block truncate text-body font-medium ${current ? "text-accent" : ""}`}>{t.title}</span>
-                  <span className="block truncate text-small text-mute">{t.artist}</span>
+                  <span className={`block truncate text-small font-medium ${current ? "text-accent" : ""}`}>{t.title}</span>
+                  <span className="block truncate text-micro text-mute">{t.artist}</span>
                 </span>
                 <span className="tnum shrink-0 text-small text-mute">{fmt(t.duration)}</span>
               </button>

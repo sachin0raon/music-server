@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Check, Info, ListPlus, MinusCircle, ShareNetwork, Trash } from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "motion/react";
+import { CaretLeft, Check, Info, ListPlus, MinusCircle, ShareNetwork, Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
 import Field from "./Field";
-import { Button } from "./Button";
+import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import { api } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
@@ -61,6 +62,7 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
   const [view, setView] = useState("actions");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const isFolder = track?.source === "folder";
 
   const run = async (fn) => {
     setBusy(true); setErr("");
@@ -73,31 +75,70 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
   const remove = () => run(async () => { await api.del(`/api/tracks/${track.id}`); dropTrack(track.id); });
   const removeFromPlaylist = () => run(() => api.del(`/api/playlists/${playlistId}/tracks/${track.id}`));
 
+  const importFolderTrack = () => run(async () => {
+    const d = await api.post("/api/library/import", { tokens: [track.id] });
+    const r = d.results?.[0];
+    if (r?.status === "ok" || r?.status === "duplicate") {
+      patchTrack(track.id, { in_library: true });
+    } else {
+      throw new Error(r?.detail || "Could not import file");
+    }
+  });
+
+  const titleText = view === "details" ? "Track details" : view === "playlists" ? "Add to playlist" : view === "confirm" ? "Delete track" : track.title;
+  const header = (
+    <div className="mb-3 flex items-center gap-2">
+      {view !== "actions" && (
+        <IconButton label="Back" variant="ghost" size="sm" onClick={() => setView("actions")} className="-ml-1 text-mute hover:text-ink">
+          <CaretLeft size={20} weight="bold" />
+        </IconButton>
+      )}
+      <h2 className="truncate text-heading font-semibold">{titleText}</h2>
+    </div>
+  );
+
   return (
-    <Sheet title={view === "details" ? "Track details" : track.title} onClose={onClose} fullScreen={fullScreen}>
+    <Sheet title={titleText} header={header} onClose={onClose} fullScreen={fullScreen}>
       {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
-      {view === "playlists" && <PlaylistPicker track={track} onDone={onClose} />}
-      {view === "details" && <TrackDetailsLoader trackId={track.id} />}
-      {view === "confirm" && (
-        <div>
-          <p className="text-body text-mute">
-            {track.is_shared ? "This removes the track for everyone and takes it out of their playlists. " : "This removes the track and its file from the server. "}It can't be undone.
-          </p>
-          <div className="mt-4 flex gap-2">
-            <Button onClick={() => setView("actions")} className="flex-1">Keep it</Button>
-            <Button variant="danger" onClick={remove} disabled={busy} className="flex-1">Delete track</Button>
-          </div>
-        </div>
-      )}
-      {view === "actions" && (
-        <div>
-          <Item icon={Info} onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
-          <Item icon={ListPlus} onClick={() => setView("playlists")}>Add to playlist</Item>
-          {playlistId && <Item icon={MinusCircle} onClick={removeFromPlaylist} disabled={busy}>Remove from this playlist</Item>}
-          {track.owned && <Item icon={ShareNetwork} onClick={toggleShare} disabled={busy}>{track.is_shared ? "Stop sharing" : "Share with everyone"}</Item>}
-          {track.owned && <Item icon={Trash} danger onClick={() => setView("confirm")}>Delete track</Item>}
-        </div>
-      )}
+      <AnimatePresence mode="wait" initial={false}>
+        {view === "playlists" && (
+          <motion.div key="playlists" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+            <PlaylistPicker track={track} onDone={onClose} />
+          </motion.div>
+        )}
+        {view === "details" && (
+          <motion.div key="details" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+            <TrackDetailsLoader trackId={track.id} track={track} />
+          </motion.div>
+        )}
+        {view === "confirm" && (
+          <motion.div key="confirm" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+            <p className="text-body text-mute">
+              {track.is_shared ? "This removes the track for everyone and takes it out of their playlists. " : "This removes the track and its file from the server. "}It can't be undone.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={() => setView("actions")} className="flex-1">Keep it</Button>
+              <Button variant="danger" onClick={remove} disabled={busy} className="flex-1">Delete track</Button>
+            </div>
+          </motion.div>
+        )}
+        {view === "actions" && (
+          <motion.div key="actions" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.18 }}>
+            <Item icon={Info} onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
+            {!isFolder && (
+              <>
+                <Item icon={ListPlus} onClick={() => setView("playlists")}>Add to playlist</Item>
+                {playlistId && <Item icon={MinusCircle} onClick={removeFromPlaylist} disabled={busy}>Remove from this playlist</Item>}
+                {track.owned && <Item icon={ShareNetwork} onClick={toggleShare} disabled={busy}>{track.is_shared ? "Stop sharing" : "Share with everyone"}</Item>}
+                {track.owned && <Item icon={Trash} danger onClick={() => setView("confirm")}>Delete track</Item>}
+              </>
+            )}
+            {isFolder && !track.in_library && (
+              <Item icon={ListPlus} onClick={importFolderTrack} disabled={busy}>Import to library</Item>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Sheet>
   );
 }

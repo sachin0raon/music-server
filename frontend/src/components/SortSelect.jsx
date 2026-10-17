@@ -8,12 +8,31 @@ export const SORTS = [
   ["title_desc", "Title Z–A"],
 ];
 
+export const SORT_STORAGE_KEY = "player.sort";
+
+export function getSavedSort(fallback = "added_desc") {
+  try {
+    const s = localStorage.getItem(SORT_STORAGE_KEY);
+    return SORTS.some(([id]) => id === s) ? s : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // A native select (keyboard, touch and screen readers for free), dressed with the
-// design-system chevron. The OS dropdown itself cannot be restyled.
-export default function SortSelect({ value, onChange, className = "" }) {
+// design-system chevron. Persists user selection to localStorage automatically.
+export default function SortSelect({ value, onChange, persistKey = SORT_STORAGE_KEY, className = "" }) {
+  const handleChange = (e) => {
+    const v = e.target.value;
+    if (persistKey) {
+      try { localStorage.setItem(persistKey, v); } catch {}
+    }
+    onChange?.(v);
+  };
+
   return (
     <span className={`relative inline-flex ${className}`}>
-      <select aria-label="Sort tracks" value={value} onChange={(e) => onChange(e.target.value)}
+      <select aria-label="Sort tracks" value={value} onChange={handleChange}
         className="field !w-auto !min-h-11 appearance-none !pr-10 text-small">
         {SORTS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
       </select>

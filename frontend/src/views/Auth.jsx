@@ -51,9 +51,9 @@ export default function Auth() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden">
-      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-        <div className="absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-glow-a opacity-70 blur-[90px]" />
-        <div className="absolute -right-32 bottom-10 h-[320px] w-[320px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -left-10 -top-20 h-[460px] w-[460px] rounded-full bg-glow-a opacity-75 blur-[90px]" />
+        <div className="absolute -right-36 bottom-0 h-[340px] w-[340px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
       </div>
       {/* Phones: one column. Desktop: the intro sits beside the form instead of floating above it. */}
       <main className="relative mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-7 px-[max(1.25rem,env(safe-area-inset-left))] py-10 lg:max-w-4xl lg:grid lg:grid-cols-2 lg:items-center lg:gap-16">

@@ -111,8 +111,15 @@ def _meta_for(rel: str, path: Path, mtime: float, size: int) -> dict:
     except ValueError:  # unreadable tags still list and still play
         meta = {"title": Path(rel).stem[:255], "artist": "Unknown Artist", "album": None,
                 "duration": None, "cover": None}
-    entry = {"title": meta["title"], "artist": meta["artist"], "album": meta["album"],
-             "duration": meta["duration"], "has_cover": bool(meta.get("cover"))}
+    entry = {
+        "title": meta["title"], "artist": meta["artist"], "album": meta["album"],
+        "duration": meta["duration"], "has_cover": bool(meta.get("cover")),
+        "bitrate": meta.get("bitrate"), "sample_rate": meta.get("sample_rate"),
+        "channels": meta.get("channels"), "format": meta.get("format"),
+        "year": meta.get("year"), "genre": meta.get("genre"),
+        "track_number": meta.get("track_number"), "disc_number": meta.get("disc_number"),
+        "composer": meta.get("composer"),
+    }
     with _index_lock:
         _index[rel] = {"mtime": mtime, "size": size, "meta": entry}
     return entry
@@ -181,6 +188,11 @@ def _rows(user_id: int, db: DbSession) -> list[dict]:
             "in_library": in_library, "created_at": datetime.fromtimestamp(entry["mtime"], timezone.utc),
             "stream_url": f"/api/library/file/{token}/stream",
             "cover_url": f"/api/library/file/{token}/cover" if meta["has_cover"] else None,
+            "bitrate": meta.get("bitrate"), "sample_rate": meta.get("sample_rate"),
+            "channels": meta.get("channels"), "format": meta.get("format"),
+            "year": meta.get("year"), "genre": meta.get("genre"),
+            "track_number": meta.get("track_number"), "disc_number": meta.get("disc_number"),
+            "composer": meta.get("composer"), "file_size": entry["size"],
             _MTIME: entry["mtime"],
         })
     return out
@@ -231,6 +243,39 @@ def scan_files(user: User = Depends(current_user), db: DbSession = Depends(get_d
     """Every folder file that is not already in this user's library: the list to confirm."""
     rows = _sorted([r for r in _rows(user.id, db) if not r["in_library"]], "title_asc")
     return {"total": len(rows), "items": _clean(rows)}
+
+
+@router.get("/file/{token}")
+def file_details(token: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Full metadata for a single folder file."""
+    path = _path_for(token)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        stat = path.stat()
+    except OSError:
+        raise HTTPException(status_code=404, detail="Not found")
+    root = _require_source()
+    rel = str(path.relative_to(root.resolve()))
+    meta = _meta_for(rel, path, stat.st_mtime, stat.st_size)
+    tag_keys, name_keys = _library_keys(db, user.id)
+    in_library = False
+    if meta["duration"]:
+        in_library = (_norm(meta["title"]), _norm(meta["artist"]), round(float(meta["duration"]))) in tag_keys
+    if not in_library:
+        in_library = (path.name.lower(), stat.st_size) in name_keys
+    return {
+        "id": token, "title": meta["title"], "artist": meta["artist"], "album": meta["album"],
+        "duration": meta["duration"], "has_cover": meta["has_cover"], "source": "folder",
+        "in_library": in_library, "created_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc),
+        "stream_url": f"/api/library/file/{token}/stream",
+        "cover_url": f"/api/library/file/{token}/cover" if meta["has_cover"] else None,
+        "bitrate": meta.get("bitrate"), "sample_rate": meta.get("sample_rate"),
+        "channels": meta.get("channels"), "format": meta.get("format"),
+        "year": meta.get("year"), "genre": meta.get("genre"),
+        "track_number": meta.get("track_number"), "disc_number": meta.get("disc_number"),
+        "composer": meta.get("composer"), "file_size": stat.st_size,
+    }
 
 
 @router.get("/file/{token}/stream")

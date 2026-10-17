@@ -56,7 +56,7 @@ export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 
             onClick={() => onMove(1)} className="text-mute"><CaretDown size={18} weight="bold" /></IconButton>
         </>
       )}
-      {!isFolder && <IconButton label={`More options for ${track.title}`} onClick={() => onMenu(track)} className="text-mute"><DotsThree size={24} weight="bold" /></IconButton>}
+      {onMenu && <IconButton label={`More options for ${track.title}`} onClick={() => onMenu(track)} className="text-mute"><DotsThree size={24} weight="bold" /></IconButton>}
     </motion.li>
   );
 }
