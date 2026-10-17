@@ -41,8 +41,8 @@ export default function TrackRow({ track, list, onMenu, onMove, at = 0, total = 
           </span>
         </span>
         <span className="min-w-0 flex-1">
-          <span className={`block truncate text-body font-medium ${active ? "text-accent" : ""}`}>{track.title}</span>
-          <span className="block truncate text-small text-mute">{track.artist}{!track.owned && track.owner ? `, shared by ${track.owner}` : ""}{track.is_shared && track.owned && <span className="sm:hidden">, shared</span>}</span>
+          <span className={`block truncate text-small font-medium sm:text-body ${active ? "text-accent" : ""}`}>{track.title}</span>
+          <span className="block truncate text-[13px] text-mute sm:text-small">{track.artist}{!track.owned && track.owner ? `, shared by ${track.owner}` : ""}{track.is_shared && track.owned && <span className="sm:hidden">, shared</span>}</span>
         </span>
       </button>
       {track.is_shared && track.owned && <Chip className="hidden sm:inline-flex">Shared</Chip>}
