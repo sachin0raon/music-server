@@ -41,6 +41,13 @@ function Page({ children }) {
   return children;
 }
 
+// Faint noise film over the page. Dark gradients quantise into visible bands on an
+// 8-bit display; this dithers them away. It sits above page content and the now
+// playing view (both have big dark gradients) but below sheets, which are opaque.
+function Grain() {
+  return <div aria-hidden="true" className="grain pointer-events-none fixed inset-0 z-[45]" />;
+}
+
 function Shell() {
   const { open, track } = usePlayer();
   const location = useLocation();
@@ -49,6 +56,7 @@ function Shell() {
     <div className="isolate min-h-[100dvh]">
       <a href="#main" className="glass-raised fixed left-3 top-3 z-[60] -translate-y-20 rounded-full px-4 py-2 text-small font-medium focus:translate-y-0">Skip to content</a>
       <Ambient />
+      <Grain />
       <MediaSessionBridge />
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col gap-1 p-5 lg:flex">
         <div className="mb-6 flex items-center gap-2.5 px-3">
