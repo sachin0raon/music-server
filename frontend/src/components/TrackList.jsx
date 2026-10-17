@@ -53,7 +53,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
           </div>
         </GlassPanel>
       )}
-      <GlassPanel as="ul" className="p-2">
+      <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
         {items.map((t, i) => <TrackRow key={t.id} track={t} list={items} onMenu={setMenu} index={i} />)}
       </GlassPanel>
       {error && <p role="alert" className="mt-3 text-small text-danger">{error}</p>}

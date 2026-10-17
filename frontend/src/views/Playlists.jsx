@@ -160,7 +160,7 @@ export function PlaylistDetail() {
           ) : (
             <>
               <p aria-live="polite" className="sr-only">{announce}</p>
-              <GlassPanel as="ul" className="p-2">
+              <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
                 {order.map((t, i) => (
                   <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
                     onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)} />

@@ -128,7 +128,7 @@ export default function FolderList({ sort, onTotal, empty }) {
         </GlassPanel>
       )}
 
-      <GlassPanel as="ul" className="p-2">
+      <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
         {items.map((t, i) => (
           <TrackRow key={t.id} track={t} list={items} source={SOURCE} index={i}
             selectable={!t.in_library} selected={selected.has(t.id)} onSelect={toggle} />

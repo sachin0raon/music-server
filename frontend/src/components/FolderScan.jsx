@@ -145,7 +145,7 @@ export default function FolderScan() {
               <Button small onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
             </GlassPanel>
           )}
-          <GlassPanel as="ul" className="p-2">
+          <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
             {items.map((t, i) => (
               <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} index={i} />
             ))}

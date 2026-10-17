@@ -66,7 +66,7 @@ export default function Auth() {
         </div>
 
         <GlassPanel level="raised" className="p-5 shadow-float">
-          <Tabs label="Authentication mode" tabs={[["login", "Sign in"], ["register", "Create account"]]} value={mode} onChange={switchTab} className="mb-5" />
+          <Tabs label="Authentication mode" fullWidth tabs={[["login", "Sign in"], ["register", "Create account"]]} value={mode} onChange={switchTab} className="mb-5" />
 
           <form onSubmit={submit} className="space-y-4">
             <Field label="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" autoCorrect="off"
