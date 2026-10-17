@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowsClockwise, FolderOpen } from "@phosphor-icons/react";
+import { ArrowsClockwise, FolderOpen, MagnifyingGlass } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import ImportResults from "./ImportResults";
@@ -14,7 +14,7 @@ const SOURCE = { type: "folder" };
 
 // The Server music tab: browse MUSIC_DIR and preview it in place. Nothing is copied
 // until the user imports, and the folder itself is never changed.
-export default function FolderList({ sort, onTotal, empty }) {
+export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty }) {
   const { bump } = useData();
   const { extendQueue, patchTrack } = usePlayer();
   const [items, setItems] = useState([]);
@@ -27,7 +27,11 @@ export default function FolderList({ sort, onTotal, empty }) {
   const [results, setResults] = useState(null);
   const gen = useRef(0); // bumped on every refresh, so a late "Show more" response is dropped
 
-  const page = (offset) => `/api/library/files?${new URLSearchParams({ sort, limit: String(PAGE), offset: String(offset) })}`;
+  const page = (offset) => {
+    const params = { sort, limit: String(PAGE), offset: String(offset) };
+    if (q) params.q = q;
+    return `/api/library/files?${new URLSearchParams(params)}`;
+  };
 
   const load = useCallback(() => {
     gen.current += 1;
@@ -36,7 +40,7 @@ export default function FolderList({ sort, onTotal, empty }) {
     api.get(page(0))
       .then((d) => { if (g === gen.current) { setItems(d.items); setTotal(d.total); setLoading(false); } })
       .catch((e) => { if (g === gen.current) { setErr(e.message); setLoading(false); } });
-  }, [sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sort, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!loading) onTotal?.(total); }, [loading, onTotal, total]);
@@ -94,6 +98,17 @@ export default function FolderList({ sort, onTotal, empty }) {
   if (loading) return <Skeleton />;
   if (err && !items.length) return <ErrorBox message={err} onRetry={load} />;
   if (!items.length) {
+    if (q) {
+      return (
+        <Empty
+          title="No matching files"
+          icon={MagnifyingGlass}
+          action={onClearSearch ? <Button variant="accent" small onClick={onClearSearch}>Clear search</Button> : undefined}
+        >
+          Nothing in the server folder matches “{q}”.
+        </Empty>
+      );
+    }
     return empty ?? (
       <Empty title="Nothing to browse" icon={FolderOpen}>
         The server's music folder has no playable files right now.

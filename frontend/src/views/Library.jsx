@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { FolderOpen, MusicNotes, Plus, ShareNetwork } from "@phosphor-icons/react";
+import { FolderOpen, MagnifyingGlass, MusicNotes, Plus, ShareNetwork, X } from "@phosphor-icons/react";
 import TrackList from "../components/TrackList";
 import FolderList from "../components/FolderList";
 import PageHeader from "../components/PageHeader";
@@ -23,27 +23,87 @@ export default function Library() {
   const isFolder = tab === "folder";
   const sort = SORTS.some(([id]) => id === params.get("sort")) ? params.get("sort") : DEFAULT_SORT;
   const [total, setTotal] = useState(null);
-  // Tab and sort both live in the URL; changing one keeps the other
+
+  const urlQ = isFolder ? (params.get("q") || "") : "";
+  const [search, setSearch] = useState(urlQ);
+
+  // Sync local search when URL query changes (e.g. back/forward navigation or tab change)
+  useEffect(() => {
+    setSearch(urlQ);
+  }, [urlQ]);
+
+  // Tab, sort, and search live in the URL
   const update = (key, value, fallback) => {
     const next = new URLSearchParams(params);
     if (value === fallback) next.delete(key); else next.set(key, value);
     setParams(next, { replace: true });
   };
+
+  const handleTabChange = (id) => {
+    const next = new URLSearchParams(params);
+    if (id === "mine") next.delete("tab"); else next.set("tab", id);
+    if (id !== "folder") next.delete("q");
+    setParams(next, { replace: true });
+  };
+
+  // Debounce search update to URL query
+  useEffect(() => {
+    if (!isFolder) return;
+    const trimmed = search.trim();
+    if (trimmed === urlQ) return;
+    const t = setTimeout(() => {
+      update("q", trimmed, "");
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search, isFolder, urlQ]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const clearSearch = () => {
+    setSearch("");
+    update("q", "", "");
+  };
+
   return (
     <>
       <PageHeader title="Library" className="mb-4"
         subtitle={total > 0 ? `${total} ${isFolder ? (total === 1 ? "file" : "files") : (total === 1 ? "track" : "tracks")}` : undefined}
         actions={<IconButton as={Link} to="/upload" label="Upload music" variant="glass"><Plus size={20} /></IconButton>} />
-      {/* On phones the tabs take the full width (three labels must not wrap) and the
-          sort control drops to its own line. From sm up the tabs size to their labels
-          and the sort sits at the far end of the same row. */}
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      {/* On phones the tabs take the full width and the controls drop to their own line.
+          From sm up the tabs size to their labels and the controls sit at the far end of the same row. */}
+      <div className="mb-5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <Tabs label="Library" tabs={folderOk ? [...TABS, FOLDER_TAB] : TABS} value={tab} className="w-full sm:w-auto"
-          onChange={(id) => update("tab", id, "mine")} />
-        <SortSelect value={sort} onChange={(v) => update("sort", v, DEFAULT_SORT)} className="self-end sm:self-auto" />
+          onChange={handleTabChange} />
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+          {isFolder && (
+            <div className="relative flex-1 sm:w-56 md:w-64 sm:flex-initial">
+              <MagnifyingGlass size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-mute" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") clearSearch();
+                }}
+                placeholder="Search server music..."
+                aria-label="Search server music"
+                className="field !min-h-11 !pl-10 !pr-10 text-small placeholder:text-faint"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-full text-mute transition-colors hover:bg-white/10 hover:text-ink"
+                >
+                  <X size={14} weight="bold" />
+                </button>
+              )}
+            </div>
+          )}
+          <SortSelect value={sort} onChange={(v) => update("sort", v, DEFAULT_SORT)} className="shrink-0" />
+        </div>
       </div>
       {isFolder ? (
-        <FolderList key="folder" sort={sort} onTotal={setTotal} empty={
+        <FolderList key="folder" sort={sort} q={urlQ} onClearSearch={clearSearch} onTotal={setTotal} empty={
           <Empty title="Nothing in the server folder" icon={FolderOpen}>
             The folder the server watches has no playable files. Whoever runs the server can add music to <code>MUSIC_DIR</code> and mount it.
           </Empty>
