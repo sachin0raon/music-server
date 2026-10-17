@@ -158,6 +158,12 @@ body {
   .interactive:hover { background: rgba(255, 255, 255, 0.06); }
 }
 
+/* Optimization: content-visibility for list rows (rendering-content-visibility) */
+.track-row-item {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 64px;
+}
+
 /* Player mode toggles (shuffle, repeat): pressed = the mode is on. The hover rule
    is needed because .btn-ghost:hover is more specific than the base rule. */
 .btn-round[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-accent); }

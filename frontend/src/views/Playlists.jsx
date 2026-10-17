@@ -59,7 +59,7 @@ export function PlaylistDetail() {
   const { id } = useParams();
   const { data, loading, error, reload } = useFetch(`/api/playlists/${id}`);
   const { bump } = useData();
-  const { playTrack, reorderQueue } = usePlayer();
+  const { playTrack, reorderQueue, track: current, playing } = usePlayer();
   const navigate = useNavigate();
   const source = { type: "playlist", id }; // tags this playlist's queue, so reorders follow it
   const [menu, setMenu] = useState(null);
@@ -161,10 +161,14 @@ export function PlaylistDetail() {
             <>
               <p aria-live="polite" className="sr-only">{announce}</p>
               <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-                {order.map((t, i) => (
-                  <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
-                    onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)} />
-                ))}
+                {order.map((t, i) => {
+                  const active = current?.id === t.id;
+                  return (
+                    <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
+                      onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)}
+                      active={active} eq={active && playing} onPlay={playTrack} />
+                  );
+                })}
               </GlassPanel>
             </>
           )}

@@ -13,7 +13,7 @@ import { useFetch, usePlayer, useTracks } from "../state";
 export default function TrackList({ scope, q, empty, featured, onTotal, sort = "added_desc" }) {
   const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q, sort);
   const { data: newest } = useFetch(featured ? `/api/tracks?scope=${scope}&sort=added_desc&limit=1` : null);
-  const { playTrack } = usePlayer();
+  const { playTrack, track: current, playing } = usePlayer();
   const [menu, setMenu] = useState(null);
 
   // Let the parent show the scope's total (Library puts it under the header).
@@ -54,7 +54,21 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
         </GlassPanel>
       )}
       <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-        {items.map((t, i) => <TrackRow key={t.id} track={t} list={items} onMenu={setMenu} index={i} />)}
+        {items.map((t, i) => {
+          const active = current?.id === t.id;
+          return (
+            <TrackRow
+              key={t.id}
+              track={t}
+              list={items}
+              onMenu={setMenu}
+              index={i}
+              active={active}
+              eq={active && playing}
+              onPlay={playTrack}
+            />
+          );
+        })}
       </GlassPanel>
       {error && <p role="alert" className="mt-3 text-small text-danger">{error}</p>}
       {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}

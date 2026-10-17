@@ -10,15 +10,15 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = still checking
   useEffect(() => { api.get("/api/auth/me").then(setUser).catch(() => setUser(null)); }, []);
   useEffect(() => {
-    const expired = () => setUser(null);
+    const expired = () => { fetchCache.clear(); setUser(null); };
     window.addEventListener("session-expired", expired);
     return () => window.removeEventListener("session-expired", expired);
   }, []);
   const value = useMemo(() => ({
     user,
-    login: async (username, password) => setUser(await api.post("/api/auth/login", { username, password })),
-    register: async (username, password) => setUser(await api.post("/api/auth/register", { username, password })),
-    logout: async () => { await api.post("/api/auth/logout").catch(() => {}); setUser(null); },
+    login: async (username, password) => { fetchCache.clear(); setUser(await api.post("/api/auth/login", { username, password })); },
+    register: async (username, password) => { fetchCache.clear(); setUser(await api.post("/api/auth/register", { username, password })); },
+    logout: async () => { fetchCache.clear(); await api.post("/api/auth/logout").catch(() => {}); setUser(null); },
   }), [user]);
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
@@ -33,20 +33,61 @@ export function DataProvider({ children }) {
   return <DataCtx.Provider value={useMemo(() => ({ version, bump }), [version, bump])}>{children}</DataCtx.Provider>;
 }
 
+/* In-memory cache & in-flight promise deduplication for client fetches (client-swr-dedup) */
+const fetchCache = new Map();
+const inflightFetches = new Map();
+
 export function useFetch(url) {
   const { version } = useData();
-  const [s, setS] = useState({ data: null, loading: true, error: null });
   const [tick, setTick] = useState(0);
+
+  // Initialize from cache if matching version
+  const [s, setS] = useState(() => {
+    if (!url) return { data: null, loading: false, error: null };
+    const cached = fetchCache.get(url);
+    if (cached && cached.version === version) {
+      return { data: cached.data, loading: false, error: null };
+    }
+    return { data: null, loading: true, error: null };
+  });
+
   useEffect(() => {
     if (!url) return;
     let live = true;
+    const cached = fetchCache.get(url);
+    if (cached && cached.version === version && tick === 0) {
+      setS({ data: cached.data, loading: false, error: null });
+      return;
+    }
+
     setS((p) => ({ ...p, loading: p.data === null, error: null }));
-    api.get(url)
+
+    let promise = inflightFetches.get(url);
+    if (!promise) {
+      promise = api.get(url)
+        .then((data) => {
+          fetchCache.set(url, { data, version });
+          return data;
+        })
+        .finally(() => {
+          inflightFetches.delete(url);
+        });
+      inflightFetches.set(url, promise);
+    }
+
+    promise
       .then((data) => live && setS({ data, loading: false, error: null }))
       .catch((e) => live && setS({ data: null, loading: false, error: e.message }));
+
     return () => { live = false; };
   }, [url, version, tick]);
-  return { ...s, reload: () => setTick((t) => t + 1) };
+
+  const reload = useCallback(() => {
+    fetchCache.delete(url);
+    setTick((t) => t + 1);
+  }, [url]);
+
+  return { ...s, reload };
 }
 
 export function useTracks(scope, q = "", sort = "added_desc") {

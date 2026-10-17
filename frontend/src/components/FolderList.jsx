@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import { ArrowsClockwise, FolderOpen, MagnifyingGlass } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
@@ -18,7 +18,7 @@ const SOURCE = { type: "folder" };
 // until the user imports, and the folder itself is never changed.
 export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty }) {
   const { bump } = useData();
-  const { extendQueue, patchTrack } = usePlayer();
+  const { extendQueue, patchTrack, playTrack, track: current, playing } = usePlayer();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -64,14 +64,14 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
     }
   };
 
-  const toggle = (t) => setSelected((s) => {
+  const toggle = useCallback((t) => setSelected((s) => {
     const n = new Set(s);
     if (n.has(t.id)) n.delete(t.id); else n.add(t.id);
     return n;
-  });
+  }), []);
 
-  const selectable = items.filter((t) => !t.in_library);
-  const allSelected = selectable.length > 0 && selectable.every((t) => selected.has(t.id));
+  const selectable = useMemo(() => items.filter((t) => !t.in_library), [items]);
+  const allSelected = useMemo(() => selectable.length > 0 && selectable.every((t) => selected.has(t.id)), [selectable, selected]);
 
   const importSelected = async () => {
     const tokens = [...selected];
@@ -147,10 +147,25 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
       )}
 
       <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-        {items.map((t, i) => (
-          <TrackRow key={t.id} track={t} list={items} source={SOURCE} index={i}
-            selectable={!t.in_library} selected={selected.has(t.id)} onSelect={toggle} onMenu={setMenuTrack} />
-        ))}
+        {items.map((t, i) => {
+          const active = current?.id === t.id;
+          return (
+            <TrackRow
+              key={t.id}
+              track={t}
+              list={items}
+              source={SOURCE}
+              index={i}
+              selectable={!t.in_library}
+              selected={selected.has(t.id)}
+              onSelect={toggle}
+              onMenu={setMenuTrack}
+              active={active}
+              eq={active && playing}
+              onPlay={playTrack}
+            />
+          );
+        })}
       </GlassPanel>
 
       {err && <p role="alert" className="mt-3 text-small text-danger">{err}</p>}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FolderOpen } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
@@ -12,7 +12,7 @@ import { useData, usePlayer } from "../state";
 // empty of ticks and importing runs the normal upload pipeline for each pick.
 export default function FolderScan() {
   const { bump } = useData();
-  const { patchTrack } = usePlayer();
+  const { patchTrack, playTrack, track: current, playing } = usePlayer();
   const [source, setSource] = useState(undefined); // undefined = still asking
   const [items, setItems] = useState(null); // null = not checked yet
   const [checking, setChecking] = useState(false);
@@ -45,11 +45,11 @@ export default function FolderScan() {
     }
   };
 
-  const toggle = (t) => setSelected((s) => {
+  const toggle = useCallback((t) => setSelected((s) => {
     const n = new Set(s);
     if (n.has(t.id)) n.delete(t.id); else n.add(t.id);
     return n;
-  });
+  }), []);
 
   const allSelected = Boolean(items?.length) && items.every((t) => selected.has(t.id));
 
@@ -146,9 +146,13 @@ export default function FolderScan() {
             </GlassPanel>
           )}
           <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-            {items.map((t, i) => (
-              <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} index={i} />
-            ))}
+            {items.map((t, i) => {
+              const active = current?.id === t.id;
+              return (
+                <TrackRow key={t.id} track={t} list={items} selectable selected={selected.has(t.id)} onSelect={toggle} index={i}
+                  active={active} eq={active && playing} onPlay={playTrack} />
+              );
+            })}
           </GlassPanel>
         </>
       )}

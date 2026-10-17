@@ -1,18 +1,21 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Playlist, MagnifyingGlass, MusicNotes, UserCircle } from "@phosphor-icons/react";
 import { AuthProvider, DataProvider, PlayerProvider, useAuth, usePlayer } from "./state";
 import { useDominantColor } from "./components/Cover";
 import PlayerBar from "./components/PlayerBar";
-import NowPlaying from "./components/NowPlaying";
 import MediaSessionBridge from "./components/MediaSessionBridge";
-import Auth from "./views/Auth";
-import Library from "./views/Library";
-import Search from "./views/Search";
-import { PlaylistDetail, PlaylistsIndex } from "./views/Playlists";
-import Upload from "./views/Upload";
-import Account from "./views/Account";
+
+// Dynamic imports for routes and heavy dialogs to optimize bundle size (bundle-dynamic-imports)
+const Auth = lazy(() => import("./views/Auth"));
+const Library = lazy(() => import("./views/Library"));
+const Search = lazy(() => import("./views/Search"));
+const Upload = lazy(() => import("./views/Upload"));
+const Account = lazy(() => import("./views/Account"));
+const PlaylistsIndex = lazy(() => import("./views/Playlists").then((m) => ({ default: m.PlaylistsIndex })));
+const PlaylistDetail = lazy(() => import("./views/Playlists").then((m) => ({ default: m.PlaylistDetail })));
+const NowPlaying = lazy(() => import("./components/NowPlaying"));
 
 const NAV = [
   { to: "/", label: "Library", icon: MusicNotes, end: true },
@@ -83,15 +86,17 @@ function Shell() {
             <motion.div key={pathname}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}>
-              <Routes location={location}>
-                <Route path="/" element={<Page><Library /></Page>} />
-                <Route path="/search" element={<Page><Search /></Page>} />
-                <Route path="/playlists" element={<Page><PlaylistsIndex /></Page>} />
-                <Route path="/playlists/:id" element={<Page><PlaylistDetailKeyed /></Page>} />
-                <Route path="/upload" element={<Page><Upload /></Page>} />
-                <Route path="/account" element={<Page><Account /></Page>} />
-                <Route path="*" element={<Page><Library /></Page>} />
-              </Routes>
+              <Suspense fallback={null}>
+                <Routes location={location}>
+                  <Route path="/" element={<Page><Library /></Page>} />
+                  <Route path="/search" element={<Page><Search /></Page>} />
+                  <Route path="/playlists" element={<Page><PlaylistsIndex /></Page>} />
+                  <Route path="/playlists/:id" element={<Page><PlaylistDetailKeyed /></Page>} />
+                  <Route path="/upload" element={<Page><Upload /></Page>} />
+                  <Route path="/account" element={<Page><Account /></Page>} />
+                  <Route path="*" element={<Page><Library /></Page>} />
+                </Routes>
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>
@@ -111,7 +116,7 @@ function Shell() {
           </NavLink>
         ))}
       </nav>
-      <AnimatePresence>{open && track && <NowPlaying key="np" />}</AnimatePresence>
+      <AnimatePresence>{open && track && <Suspense fallback={null}><NowPlaying key="np" /></Suspense>}</AnimatePresence>
     </div>
   );
 }
@@ -129,7 +134,7 @@ function Gate() {
       <span className="grid h-14 w-14 animate-pulse place-items-center rounded-tile bg-accent text-accent-ink shadow-glow"><MusicNotes size={28} weight="fill" /></span>
     </div>
   );
-  return user ? <Shell /> : <Auth />;
+  return user ? <Shell /> : <Suspense fallback={null}><Auth /></Suspense>;
 }
 
 export default function App() {

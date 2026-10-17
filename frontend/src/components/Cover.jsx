@@ -31,11 +31,20 @@ export default function Cover({ track, className = "", rounded = "rounded-xl", e
   );
 }
 
+// Module-level cache for extracted dominant colors (js-cache-function-results)
+const dominantColorCache = new Map();
+
 // Average colour of the cover (saturated pixels count more); drives the ambient glow
 export function useDominantColor(track) {
-  const [color, setColor] = useState(track ? toneFor(track.id) : "#1E4F5C");
+  const cacheKey = track ? (track.cover_url ?? (track.has_cover ? `/api/tracks/${track.id}/cover` : String(track.id))) : null;
+  const [color, setColor] = useState(() => (cacheKey && dominantColorCache.has(cacheKey) ? dominantColorCache.get(cacheKey) : track ? toneFor(track.id) : "#1E4F5C"));
+
   useEffect(() => {
-    if (!track) return;
+    if (!track || !cacheKey) return;
+    if (dominantColorCache.has(cacheKey)) {
+      setColor(dominantColorCache.get(cacheKey));
+      return;
+    }
     setColor(toneFor(track.id));
     const src = coverUrl(track);
     if (!src) return;
@@ -53,11 +62,14 @@ export function useDominantColor(track) {
           const wt = 0.15 + (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2])) / 255;
           r += d[i] * wt; g += d[i + 1] * wt; b += d[i + 2] * wt; w += wt;
         }
-        if (!dead) setColor(`rgb(${(r / w) | 0},${(g / w) | 0},${(b / w) | 0})`);
+        const rgb = `rgb(${(r / w) | 0},${(g / w) | 0},${(b / w) | 0})`;
+        dominantColorCache.set(cacheKey, rgb);
+        if (!dead) setColor(rgb);
       } catch { /* keep the fallback tone */ }
     };
     img.src = src;
     return () => { dead = true; };
-  }, [track?.id, track?.has_cover]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [track?.id, track?.has_cover, cacheKey]);
+
   return color;
 }
