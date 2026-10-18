@@ -245,18 +245,16 @@ def scan_files(user: User = Depends(current_user), db: DbSession = Depends(get_d
     return {"total": len(rows), "items": _clean(rows)}
 
 
-@router.get("/file/{token}")
-def file_details(token: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
-    """Full metadata for a single folder file."""
-    path = _path_for(token)
-    if path is None:
-        raise HTTPException(status_code=404, detail="Not found")
+def _file_details_dict(token: str, path: Path, user: User, db: DbSession, force_reload: bool = False) -> dict:
     try:
         stat = path.stat()
     except OSError:
         raise HTTPException(status_code=404, detail="Not found")
     root = _require_source()
     rel = str(path.relative_to(root.resolve()))
+    if force_reload:
+        with _index_lock:
+            _index.pop(rel, None)
     meta = _meta_for(rel, path, stat.st_mtime, stat.st_size)
     tag_keys, name_keys = _library_keys(db, user.id)
     in_library = False
@@ -277,6 +275,23 @@ def file_details(token: str, user: User = Depends(current_user), db: DbSession =
         "composer": meta.get("composer"), "file_size": stat.st_size,
     }
 
+
+@router.get("/file/{token}")
+def file_details(token: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Full metadata for a single folder file."""
+    path = _path_for(token)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return _file_details_dict(token, path, user, db)
+
+
+@router.post("/file/{token}/refetch")
+def refetch_file(token: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Re-reads tags and embedded cover for a single folder file, clearing cached metadata."""
+    path = _path_for(token)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return _file_details_dict(token, path, user, db, force_reload=True)
 
 @router.get("/file/{token}/stream")
 def stream_file(token: str, user: User = Depends(current_user)):

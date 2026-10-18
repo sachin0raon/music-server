@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { ArrowsClockwise } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
+import { Button } from "./Button";
 import { Skeleton, ErrorBox } from "./States";
-import { fmt, fmtBitrate, fmtChannels, fmtDate, fmtHz, fmtSize } from "../api";
-import { useFetch } from "../state";
-
+import { api, fmt, fmtBitrate, fmtChannels, fmtDate, fmtHz, fmtSize } from "../api";
+import { useData, useFetch, usePlayer } from "../state";
 const MISSING = <span className="text-mute">—</span>;
 
 // Track and disc are one row, but either can stand alone: a file can carry a
@@ -27,7 +29,48 @@ function Row({ label, children }) {
 
 // The full metadata grid, given a detail object from GET /api/tracks/{id} or /api/library/file/{token}.
 // Missing values show a dash instead of an empty or hidden row.
-export function TrackDetails({ track }) {
+export function TrackDetails({ track: initialTrack, onUpdated }) {
+  const [track, setTrack] = useState(initialTrack);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const { bump } = useData();
+  const { patchTrack } = usePlayer();
+
+  useEffect(() => {
+    setTrack(initialTrack);
+  }, [initialTrack]);
+
+  const isFolder = track.source === "folder";
+  const canRefetch = isFolder || track.owned;
+
+  const handleRefetch = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const endpoint = isFolder
+        ? `/api/library/file/${track.id}/refetch`
+        : `/api/tracks/${track.id}/refetch`;
+      const updated = await api.post(endpoint);
+      const cacheBust = Date.now();
+      const cover_url = isFolder
+        ? (updated.has_cover ? `/api/library/file/${track.id}/cover?t=${cacheBust}` : null)
+        : (updated.has_cover ? `/api/tracks/${track.id}/cover?t=${cacheBust}` : null);
+      const fullTrack = {
+        ...track,
+        ...updated,
+        cover_url,
+      };
+      setTrack(fullTrack);
+      onUpdated?.(fullTrack);
+      patchTrack(track.id, fullTrack);
+      bump();
+    } catch (e) {
+      setErr(e.message || "Could not refetch track details");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const num = (n) => (n === null || n === undefined ? null : String(n));
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: "easeOut" }}>
@@ -63,6 +106,21 @@ export function TrackDetails({ track }) {
         <Row label="File size">{fmtSize(track.file_size)}</Row>
         <Row label="Added">{fmtDate(track.created_at)}</Row>
       </dl>
+
+      {canRefetch && (
+        <div className="mt-5 border-t border-line pt-4">
+          <Button
+            variant="glass"
+            onClick={handleRefetch}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-2"
+          >
+            <ArrowsClockwise size={18} className={busy ? "animate-spin" : ""} weight="bold" />
+            {busy ? "Refetching details..." : "Refetch track details"}
+          </Button>
+          {err && <p role="alert" className="mt-2 text-center text-small text-danger">{err}</p>}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -73,9 +131,10 @@ export default function TrackDetailsLoader({ trackId, track: initialTrack }) {
   const url = isFolder ? `/api/library/file/${trackId}` : (trackId ? `/api/tracks/${trackId}` : null);
   const ready = initialTrack && (initialTrack.bitrate !== undefined || initialTrack.format !== undefined);
   const { data, loading, error, reload } = useFetch(!ready ? url : null);
-  const track = ready ? initialTrack : data;
+  const [overrideTrack, setOverrideTrack] = useState(null);
+  const track = overrideTrack || (ready ? initialTrack : data);
   if (loading && !track) return <Skeleton rows={4} />;
   if (error && !track) return <ErrorBox message={error || "Track not found"} onRetry={reload} />;
   if (!track) return null;
-  return <TrackDetails track={track} />;
+  return <TrackDetails track={track} onUpdated={setOverrideTrack} />;
 }

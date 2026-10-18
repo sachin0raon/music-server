@@ -513,6 +513,82 @@ def set_shared(track_id: int, body: ShareBody, user: User = Depends(current_user
         db.refresh(track)
     return track_out(track, user.id, user.username)
 
+@router.post("/{track_id}/refetch")
+def refetch_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Re-reads tags and embedded cover from the audio file on disk and updates the track."""
+    track = _get_owned(db, user, track_id)
+    path = resolve_file(track.file_path)
+    try:
+        stat = path.stat()
+        meta = _read_meta(path, Path(track.original_name).stem[:255])
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read audio file: {exc}")
+
+    new_cover = meta.get("cover")
+    cover_ext = _cover_ext(new_cover) if new_cover else None
+    old_cover = track.cover_path
+    cover_to_unlink = None
+
+    if cover_ext:
+        cover_rel = f"users/{user.id}/covers/{secrets.token_hex(16)}{cover_ext}"
+        cover_final = settings.data_dir / cover_rel
+        cover_final.parent.mkdir(parents=True, exist_ok=True)
+        cover_final.write_bytes(new_cover)
+        track.cover_path = cover_rel
+        if old_cover and old_cover != cover_rel:
+            cover_to_unlink = old_cover
+    elif old_cover and not new_cover:
+        track.cover_path = None
+        cover_to_unlink = old_cover
+
+    track.title = meta["title"]
+    track.artist = meta["artist"]
+    track.album = meta["album"]
+    track.duration = meta["duration"]
+    track.bitrate = meta.get("bitrate")
+    track.sample_rate = meta.get("sample_rate")
+    track.channels = meta.get("channels")
+    track.format = meta.get("format")
+    track.year = meta.get("year")
+    track.genre = meta.get("genre")
+    track.track_number = meta.get("track_number")
+    track.disc_number = meta.get("disc_number")
+    track.composer = meta.get("composer")
+
+    if stat.st_size != track.file_size:
+        try:
+            with path.open("rb") as f:
+                h = hashlib.sha256()
+                while chunk := f.read(CHUNK):
+                    h.update(chunk)
+                new_digest = h.hexdigest()
+            clash = db.scalar(
+                select(Track.id).where(
+                    Track.owner_id == user.id,
+                    Track.content_hash == new_digest,
+                    Track.id != track.id
+                )
+            )
+            if not clash:
+                track.content_hash = new_digest
+        except OSError:
+            pass
+    track.file_size = stat.st_size
+
+    db.commit()
+    db.refresh(track)
+
+    if cover_to_unlink:
+        root = settings.data_dir.resolve()
+        try:
+            p = (root / cover_to_unlink).resolve()
+            if root in p.parents:
+                p.unlink(missing_ok=True)
+        except OSError:
+            log.exception("Could not remove old cover %s", cover_to_unlink)
+
+    return track_out(track, user.id, user.username, detail=True)
+
 
 @router.delete("/{track_id}", status_code=204)
 def delete_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
