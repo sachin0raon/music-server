@@ -5,10 +5,16 @@
     docker compose exec music-server python -m app.cli import USERNAME /music [--dry-run]
     docker compose exec music-server python -m app.cli migrate
     docker compose exec music-server python -m app.cli backfill-tags [--dry-run] [--force]
+    docker compose exec music-server python -m app.cli backup rename --users 1 2 [--dry-run]
+    docker compose exec music-server python -m app.cli backup restore --users 1 2 [--dry-run]
+    docker compose exec music-server python -m app.cli backup status [--users 1 2 | --all]
 """
 import argparse
 import getpass
+import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -182,6 +188,246 @@ def import_music(username: str, folder: str, dry_run: bool = False) -> int:
     return 0
 
 
+# ---------- backup rename / restore / status ----------
+
+MANIFEST_FILENAME = ".rename_manifest.json"
+
+
+def sanitize_filename(name: str) -> str:
+    """Sanitizes original_name to be a safe, single-component filename."""
+    # Replace slashes first so names like 'AC/DC' become 'AC_DC' rather than losing 'AC'
+    safe = re.sub(r'[/\\]+', '_', name)
+    base = Path(safe).name
+    # Strip null bytes, control characters, and filesystem-illegal characters
+    clean = re.sub(r'[\x00-\x1f:*?"<>|]', '_', base).strip()
+    return clean or "track"
+
+
+def resolve_unique_name(base_name: str, used_names_lower: set[str]) -> str:
+    """Resolves duplicate names by appending (1), (2), etc., before the file extension."""
+    p = Path(base_name)
+    stem = p.stem
+    ext = p.suffix
+    candidate = f"{stem}{ext}"
+    i = 1
+    while candidate.lower() in used_names_lower:
+        candidate = f"{stem} ({i}){ext}"
+        i += 1
+    used_names_lower.add(candidate.lower())
+    return candidate
+
+
+def _resolve_user_targets(users: list[int] | None, all_users: bool) -> list[tuple[int, Path]]:
+    """Resolves target user IDs and directory paths."""
+    users_root = settings.data_dir / "users"
+    if all_users:
+        if not users_root.is_dir():
+            return []
+        targets = []
+        for p in sorted(users_root.iterdir()):
+            if p.is_dir() and p.name.isdigit():
+                targets.append((int(p.name), p))
+        return targets
+    if users:
+        return [(uid, users_root / str(uid)) for uid in sorted(set(users))]
+    return []
+
+
+def backup_rename(users: list[int] | None, all_users: bool, dry_run: bool = False) -> int:
+    targets = _resolve_user_targets(users, all_users)
+    if not targets:
+        print("No user directories found to process.")
+        return 0
+
+    total_renamed = 0
+    with SessionLocal() as db:
+        for uid, udir in targets:
+            print(f"\n--- Processing User {uid} ({udir}) ---")
+            if not udir.is_dir():
+                print(f"Directory does not exist: {udir}")
+                continue
+
+            manifest_path = udir / MANIFEST_FILENAME
+            if manifest_path.exists():
+                print(f"Manifest already exists: {manifest_path}")
+                print(f"User {uid} is already in BACKUP state. Run 'restore' first before renaming again.")
+                continue
+
+            tracks = db.scalars(select(Track).where(Track.owner_id == uid).order_by(Track.id)).all()
+            if not tracks:
+                print(f"No tracks found in database for user {uid}.")
+                continue
+
+            used_names_lower: set[str] = set()
+            mappings: list[dict] = []
+            missing_files: list[str] = []
+
+            for track in tracks:
+                token_path = settings.data_dir / track.file_path
+                token_name = token_path.name
+
+                if not token_path.is_file():
+                    missing_files.append(f"Track {track.id} ({track.title}): expected at {token_path}")
+                    continue
+
+                clean = sanitize_filename(track.original_name)
+                # If original_name had no extension, preserve the extension of the token file
+                if not Path(clean).suffix:
+                    clean = f"{clean}{token_path.suffix}"
+
+                backup_name = resolve_unique_name(clean, used_names_lower)
+                mappings.append({
+                    "token_name": token_name,
+                    "backup_name": backup_name,
+                    "track_id": track.id,
+                })
+
+            if missing_files:
+                print(f"Warning: {len(missing_files)} track files in database were missing on disk:")
+                for m in missing_files[:5]:
+                    print(f"  - {m}")
+                if len(missing_files) > 5:
+                    print(f"  ...and {len(missing_files) - 5} more")
+
+            if not mappings:
+                print(f"No existing files to rename for user {uid}.")
+                continue
+
+            print(f"Planned renames for user {uid} ({len(mappings)} files):")
+            for m in mappings:
+                print(f"  {m['token_name']}  ->  {m['backup_name']}")
+
+            if dry_run:
+                print(f"Dry run: {len(mappings)} files would be renamed for user {uid} (no changes made).")
+                continue
+
+            # Write manifest atomically before performing renames
+            manifest_data = {
+                "version": 1,
+                "user_id": uid,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "renamed",
+                "files": mappings,
+            }
+            tmp_manifest = udir / f"{MANIFEST_FILENAME}.tmp"
+            with open(tmp_manifest, "w", encoding="utf-8") as f:
+                json.dump(manifest_data, f, indent=2)
+            tmp_manifest.replace(manifest_path)
+
+            # Rename files on disk
+            for m in mappings:
+                src = udir / m["token_name"]
+                dst = udir / m["backup_name"]
+                src.replace(dst)
+
+            print(f"Successfully renamed {len(mappings)} files for user {uid}. Manifest saved to {manifest_path.name}.")
+            total_renamed += len(mappings)
+
+    verb = "would be renamed" if dry_run else "renamed"
+    print(f"\nDone: {total_renamed} total files {verb}.")
+    return 0
+
+
+def backup_restore(users: list[int] | None, all_users: bool, dry_run: bool = False) -> int:
+    targets = _resolve_user_targets(users, all_users)
+    if not targets:
+        print("No user directories found to process.")
+        return 0
+
+    total_restored = 0
+    for uid, udir in targets:
+        print(f"\n--- Restoring User {uid} ({udir}) ---")
+        if not udir.is_dir():
+            print(f"Directory does not exist: {udir}")
+            continue
+
+        manifest_path = udir / MANIFEST_FILENAME
+        if not manifest_path.is_file():
+            print(f"No manifest found ({manifest_path.name}). User {uid} is already in NORMAL state.")
+            continue
+
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            print(f"Error reading manifest {manifest_path}: {exc}")
+            continue
+
+        files = data.get("files", [])
+        if not files:
+            print(f"Manifest for user {uid} contains no file records. Removing empty manifest.")
+            if not dry_run:
+                manifest_path.unlink(missing_ok=True)
+            continue
+
+        print(f"Planned restore for user {uid} ({len(files)} files):")
+        restore_plan: list[tuple[Path, Path]] = []
+        for m in files:
+            token_name = m["token_name"]
+            backup_name = m["backup_name"]
+            src = udir / backup_name
+            dst = udir / token_name
+
+            if src.is_file():
+                print(f"  {backup_name}  ->  {token_name}")
+                restore_plan.append((src, dst))
+            elif dst.is_file():
+                print(f"  {token_name} is already restored (skipping)")
+            else:
+                print(f"  Warning: Neither {backup_name} nor {token_name} exists on disk!")
+
+        if dry_run:
+            print(f"Dry run: {len(restore_plan)} files would be restored for user {uid} (no changes made).")
+            continue
+
+        for src, dst in restore_plan:
+            src.replace(dst)
+
+        manifest_path.unlink(missing_ok=True)
+        print(f"Successfully restored {len(restore_plan)} files for user {uid}. Manifest removed.")
+        total_restored += len(restore_plan)
+
+    verb = "would be restored" if dry_run else "restored"
+    print(f"\nDone: {total_restored} total files {verb}.")
+    return 0
+
+
+def backup_status(users: list[int] | None, all_users: bool) -> int:
+    # If neither --users nor --all is specified, default to all users
+    if not users and not all_users:
+        all_users = True
+
+    targets = _resolve_user_targets(users, all_users)
+    if not targets:
+        print("No user directories found.")
+        return 0
+
+    print(f"{'User ID':<10} {'State':<12} {'Files':<10} {'Details'}")
+    print("-" * 65)
+
+    for uid, udir in targets:
+        if not udir.is_dir():
+            print(f"{uid:<10} {'MISSING':<12} {'-':<10} Directory does not exist")
+            continue
+
+        manifest_path = udir / MANIFEST_FILENAME
+        audio_files = [p for p in udir.iterdir() if p.is_file() and not p.name.startswith(".")]
+
+        if manifest_path.is_file():
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                created = data.get("created_at", "unknown date")
+                count = len(data.get("files", []))
+                print(f"{uid:<10} {'BACKUP':<12} {count:<10} Renamed at {created}")
+            except Exception as exc:
+                print(f"{uid:<10} {'ERROR':<12} {'-':<10} Corrupt manifest ({exc})")
+        else:
+            print(f"{uid:<10} {'NORMAL':<12} {len(audio_files):<10} Stored with hex token names")
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -197,6 +443,23 @@ def main() -> int:
     bf = sub.add_parser("backfill-tags", help="re-read file tags and fill audio metadata for existing tracks")
     bf.add_argument("--dry-run", action="store_true", help="show what would change without writing")
     bf.add_argument("--force", action="store_true", help="overwrite existing values, not just empty ones")
+
+    # backup
+    bp = sub.add_parser("backup", help="toggle files between token names and original names for backup")
+    bp_sub = bp.add_subparsers(dest="backup_cmd", required=True)
+
+    for action, desc in [
+        ("rename", "rename files from token names to original human-readable names"),
+        ("restore", "rename files from original human-readable names back to token names"),
+        ("status", "show backup state of user directories"),
+    ]:
+        p = bp_sub.add_parser(action, help=desc)
+        group = p.add_mutually_exclusive_group(required=(action != "status"))
+        group.add_argument("--users", nargs="+", type=int, help="one or more user IDs to target")
+        group.add_argument("--all", action="store_true", help="target all user directories in data/users/")
+        if action != "status":
+            p.add_argument("--dry-run", action="store_true", help="simulate changes without touching files")
+
     args = parser.parse_args()
     if args.cmd == "make-admin":
         return make_admin(args.username)
@@ -206,6 +469,13 @@ def main() -> int:
         return migrate()
     if args.cmd == "backfill-tags":
         return backfill_tags(args.dry_run, args.force)
+    if args.cmd == "backup":
+        if args.backup_cmd == "rename":
+            return backup_rename(args.users, args.all, args.dry_run)
+        if args.backup_cmd == "restore":
+            return backup_restore(args.users, args.all, args.dry_run)
+        if args.backup_cmd == "status":
+            return backup_status(args.users, args.all)
     return import_music(args.username, args.folder, args.dry_run)
 
 

@@ -44,6 +44,7 @@ Each user has a private library. Users can upload their own files, share a track
 - Reads title, artist, album, duration and embedded cover art from the files' tags
 - Admin tools: list users, reset passwords (in the app or from the command line)
 - Import an existing music folder from the command line
+- Backup CLI to temporarily rename files to original song names for human-readable disk backups
 - Supported formats: **mp3, flac, m4a, ogg, opus, wav**
 
 ---
@@ -514,6 +515,8 @@ All endpoints except register, login and health need a signed-in session. Intera
 
 ## Backups and updates
 
+### Standard backup
+
 **Back up both of these together:**
 
 1. The MySQL database
@@ -521,7 +524,45 @@ All endpoints except register, login and health need a signed-in session. Intera
 
 Either one alone is not enough: the database lists the tracks, and the folder holds the files.
 
-**Update:**
+### Song file backup with original names
+
+Uploaded audio files in `./data/users/<user_id>/` are stored with internal randomized hex token names (for example `7cf6375ca01fd8aa7c68d27a27d84269.mp3`). When copying or backing up songs to an external drive or media player, you can temporarily rename them to their original human-readable names (`Track.original_name`) and restore them afterwards using the `backup` CLI:
+
+#### 1. Check status
+Check whether user directories are currently in normal state or in backup state:
+
+```bash
+docker compose exec -u app music-server python -m app.cli backup status
+```
+*(Or locally outside Docker: `python -m app.cli backup status` inside `backend/`)*
+
+#### 2. Rename files to original names
+```bash
+# Preview renames safely with dry-run:
+docker compose exec -u app music-server python -m app.cli backup rename --all --dry-run
+
+# Perform rename on all users (or specify individual users with --users 1 2):
+docker compose exec -u app music-server python -m app.cli backup rename --all
+```
+This records a `.rename_manifest.json` inside each targeted user directory, sanitizes illegal characters, and resolves duplicate titles by appending `(1)`, `(2)` suffixes. Cover art files in `covers/` and database records are left untouched.
+
+#### 3. Copy your songs
+Copy the user directories or audio files to your external backup media.
+
+#### 4. Restore files back to token names
+```bash
+# Preview restore:
+docker compose exec -u app music-server python -m app.cli backup restore --all --dry-run
+
+# Restore files:
+docker compose exec -u app music-server python -m app.cli backup restore --all
+```
+
+> **Note:** The `restore` command only reads `.rename_manifest.json` and does not require an active database connection.
+
+For complete design and edge-case details, see [docs/BackupTool.md](docs/BackupTool.md).
+
+### Updates
 
 ```bash
 docker compose up -d --build
