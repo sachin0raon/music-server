@@ -26,10 +26,10 @@ export default function Library() {
   const sortParam = params.get("sort");
   const sort = SORTS.some(([id]) => id === sortParam) ? sortParam : getSavedSort(DEFAULT_SORT);
 
-  // Subtitle always renders (even with 0 tracks/files) so the header height never shifts
+  // Subtitle always renders (even with 0 tracks) so the header height never shifts
   const [total, setTotal] = useState(null);
   const count = total ?? 0;
-  const subtitle = `${count} ${isFolder ? (count === 1 ? "file" : "files") : (count === 1 ? "track" : "tracks")}`;
+  const subtitle = `${count} ${count === 1 ? "track" : "tracks"}`;
 
   const urlQ = params.get("q") || "";
   const [search, setSearch] = useState(urlQ);

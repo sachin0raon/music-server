@@ -9,9 +9,11 @@ export function Button({ as: Tag = "button", variant = "glass", small, className
 }
 
 // Icon-only button. `label` is required: it becomes the aria-label and tooltip.
-export function IconButton({ as: Tag = "button", label, variant = "ghost", size = "md", className = "", children, ...props }) {
+// When rendering a standard <button>, default type to "button" so it does not submit forms by accident.
+export function IconButton({ as: Tag = "button", label, variant = "ghost", size = "md", className = "", children, type, ...props }) {
+  const buttonType = Tag === "button" ? (type ?? "button") : type;
   return (
-    <Tag aria-label={label} title={label} className={`btn-round ${VARIANT[variant]} ${ROUND_SIZE[size]} ${className}`} {...props}>
+    <Tag aria-label={label} title={label} type={buttonType} className={`btn-round ${VARIANT[variant]} ${ROUND_SIZE[size]} ${className}`} {...props}>
       {children}
     </Tag>
   );
