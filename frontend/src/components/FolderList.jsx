@@ -17,7 +17,7 @@ const SOURCE = { type: "folder" };
 // The Server music tab: browse MUSIC_DIR and preview it in place. Nothing is copied
 // until the user imports, and the folder itself is never changed.
 export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty }) {
-  const { bump } = useData();
+  const { bump, version } = useData();
   const { extendQueue, patchTrack, playTrack, track: current, playing } = usePlayer();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -39,11 +39,11 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
   const load = useCallback(() => {
     gen.current += 1;
     const g = gen.current;
-    setLoading(true); setErr(""); setResults(null); setSelected(new Set());
+    setLoading(items.length === 0); setErr(""); setResults(null); setSelected(new Set());
     api.get(page(0))
       .then((d) => { if (g === gen.current) { setItems(d.items); setTotal(d.total); setLoading(false); } })
       .catch((e) => { if (g === gen.current) { setErr(e.message); setLoading(false); } });
-  }, [sort, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sort, q, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!loading) onTotal?.(total); }, [loading, onTotal, total]);

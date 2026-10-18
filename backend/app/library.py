@@ -26,8 +26,10 @@ from .tracks import (
     IMAGE_TYPES,
     MEDIA_TYPES,
     FileUpload,
+    TrackEditBody,
     _cover_ext,
     _read_meta,
+    _write_file_tags,
     walk_files,
 )
 from .tracks import _process as process_file
@@ -291,6 +293,31 @@ def refetch_file(token: str, user: User = Depends(current_user), db: DbSession =
     path = _path_for(token)
     if path is None:
         raise HTTPException(status_code=404, detail="Not found")
+    return _file_details_dict(token, path, user, db, force_reload=True)
+
+
+@router.patch("/file/{token}")
+def update_file_details(token: str, body: TrackEditBody, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Update title, artist, album, composer, genre, and year for a server folder file. Admin only."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can edit server music metadata")
+    path = _path_for(token)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        _write_file_tags(path, {
+            "title": body.title.strip(),
+            "artist": body.artist.strip() or "Unknown Artist",
+            "album": body.album.strip() if body.album and body.album.strip() else None,
+            "composer": body.composer.strip() if body.composer and body.composer.strip() else None,
+            "genre": body.genre.strip() if body.genre and body.genre.strip() else None,
+            "year": body.year,
+        })
+    except OSError:
+        raise HTTPException(status_code=400, detail="The server music folder is mounted read-only and files cannot be modified.")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not update file tags: {exc}")
+
     return _file_details_dict(token, path, user, db, force_reload=True)
 
 @router.get("/file/{token}/stream")

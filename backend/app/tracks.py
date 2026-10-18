@@ -4,6 +4,7 @@ import http.client
 import ipaddress
 import logging
 import os
+import re
 import secrets
 import socket
 import urllib.error
@@ -344,25 +345,96 @@ class _SafeRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _link_filename(parts, content_type: str) -> str | None:
-    """A name the pipeline can trust: the URL's own extension wins, otherwise the
-    Content-Type decides. None means the link is not a file we can store."""
+def _cd_filename(header: str | None) -> str | None:
+    if not header:
+        return None
+    m_star = re.search(r"filename\*\s*=\s*utf-8''([^;\r\n]+)", header, re.IGNORECASE)
+    if m_star:
+        raw = urllib.parse.unquote(m_star.group(1).strip().strip('"\''))
+        return Path(raw).name
+    m = re.search(r'filename\s*=\s*(?:"([^"]+)"|([^;\s\r\n]+))', header, re.IGNORECASE)
+    if m:
+        raw = urllib.parse.unquote((m.group(1) or m.group(2)).strip().strip('"\''))
+        return Path(raw).name
+    return None
+
+
+def _query_filename(query_str: str) -> str | None:
+    query = urllib.parse.parse_qs(query_str)
+    for key in ("path", "file", "filename", "name", "song", "track"):
+        for val in query.get(key, []):
+            unquoted = Path(urllib.parse.unquote(val)).name
+            if Path(unquoted).suffix.lower() in ALLOWED_EXT:
+                return unquoted
+    return None
+
+
+def _clean_custom_filename(custom: str | None, detected_ext: str | None) -> str | None:
+    if not custom or not custom.strip():
+        return None
+    cleaned = Path(custom.strip()).name
+    if not cleaned:
+        return None
+    if Path(cleaned).suffix.lower() in ALLOWED_EXT:
+        return cleaned[:255]
+    if detected_ext and detected_ext.lower() in ALLOWED_EXT:
+        return (Path(cleaned).stem or "download")[:250] + detected_ext.lower()
+    return cleaned[:255]
+
+
+def _detect_ext(parts, content_type: str, cd_name: str | None = None) -> str | None:
+    if cd_name and Path(cd_name).suffix.lower() in ALLOWED_EXT:
+        return Path(cd_name).suffix.lower()
+    path_suffix = Path(urllib.parse.unquote(parts.path)).suffix.lower()
+    if path_suffix in ALLOWED_EXT:
+        return path_suffix
+    q_name = _query_filename(parts.query)
+    if q_name and Path(q_name).suffix.lower() in ALLOWED_EXT:
+        return Path(q_name).suffix.lower()
+    return CONTENT_TYPE_EXT.get(content_type)
+
+
+def _link_filename(parts, content_type: str, cd_name: str | None = None, custom_name: str | None = None) -> str | None:
+    """A name the pipeline can trust: custom user-given name wins, then Content-Disposition,
+    then query parameter, then URL path, with Content-Type supplying the extension if needed."""
+    ext = _detect_ext(parts, content_type, cd_name)
+
+    if custom_name and custom_name.strip():
+        cleaned = _clean_custom_filename(custom_name, ext)
+        if cleaned and Path(cleaned).suffix.lower() in ALLOWED_EXT:
+            return cleaned[:255]
+
+    if cd_name:
+        if Path(cd_name).suffix.lower() in ALLOWED_EXT:
+            return cd_name[:255]
+        if ext:
+            return (Path(cd_name).stem or "download")[:250] + ext
+
+    q_name = _query_filename(parts.query)
+    if q_name:
+        return q_name[:255]
+
     base = Path(urllib.parse.unquote(parts.path)).name or "download"
     if Path(base).suffix.lower() in ALLOWED_EXT:
         return base[:255]
-    ext = CONTENT_TYPE_EXT.get(content_type)
     if ext:
         return (Path(base).stem or "download")[:250] + ext
     return None
 
 
-def _name_hint(url: str) -> str:
+def _name_hint(url: str, custom_filename: str | None = None) -> str:
     """A readable label for a result, used even when the link is rejected."""
-    base = Path(urllib.parse.unquote(urllib.parse.urlsplit(url).path)).name
+    if custom_filename and custom_filename.strip():
+        return Path(custom_filename.strip()).name[:255]
+    parts = urllib.parse.urlsplit(url)
+    q_name = _query_filename(parts.query)
+    if q_name:
+        return q_name[:255]
+    base = Path(urllib.parse.unquote(parts.path)).name
     return base[:255] or "link"
 
 
-def _open_link(url: str):
+def _open_link(url: str, custom_filename: str | None = None):
     """Validate the link and return (filename, open response). Raises ValueError with a
     message that is safe to show the user."""
     _check_link(url)
@@ -379,7 +451,9 @@ def _open_link(url: str):
         resp.close()
         raise ValueError(f"File too large (max {settings.max_import_mb} MB)")
     content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-    name = _link_filename(urllib.parse.urlsplit(url.strip()), content_type)
+    cd_name = _cd_filename(resp.headers.get("Content-Disposition"))
+    parts = urllib.parse.urlsplit(url.strip())
+    name = _link_filename(parts, content_type, cd_name=cd_name, custom_name=custom_filename)
     if name is None:
         resp.close()
         raise ValueError("That link does not point to a supported audio file")
@@ -388,6 +462,7 @@ def _open_link(url: str):
 
 class UrlBody(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
+    filename: str | None = Field(default=None, max_length=255)
 
 
 @router.post("/from-url")
@@ -396,9 +471,9 @@ def import_from_url(body: UrlBody, user: User = Depends(current_user), db: DbSes
     _url_limiter.check(f"url:{user.id}")
     _url_limiter.hit(f"url:{user.id}")
     try:
-        name, resp = _open_link(body.url)
+        name, resp = _open_link(body.url, custom_filename=body.filename)
     except ValueError as exc:
-        return _result(_name_hint(body.url), "error", str(exc))
+        return _result(_name_hint(body.url, custom_filename=body.filename), "error", str(exc))
     try:
         return _process(FileUpload(name, resp), user, db, max_bytes=settings.max_import_mb * 1024 * 1024)
     finally:
@@ -512,6 +587,71 @@ def set_shared(track_id: int, body: ShareBody, user: User = Depends(current_user
         db.commit()
         db.refresh(track)
     return track_out(track, user.id, user.username)
+
+
+class TrackEditBody(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    artist: str = Field(default="Unknown Artist", max_length=255)
+    album: str | None = Field(default=None, max_length=255)
+    composer: str | None = Field(default=None, max_length=255)
+    genre: str | None = Field(default=None, max_length=64)
+    year: int | None = Field(default=None, ge=1000, le=3000)
+
+
+def _write_file_tags(path: Path, data: dict) -> None:
+    """Write tags directly to the audio file on disk."""
+    easy = mutagen.File(path, easy=True)
+    if easy is None:
+        return
+    if easy.tags is None:
+        try:
+            easy.add_tags()
+        except Exception:
+            pass
+
+    def set_or_pop(key: str, val):
+        if val is not None and str(val).strip():
+            easy[key] = str(val).strip()
+        else:
+            easy.pop(key, None)
+
+    set_or_pop("title", data.get("title"))
+    set_or_pop("artist", data.get("artist"))
+    set_or_pop("album", data.get("album"))
+    set_or_pop("composer", data.get("composer"))
+    set_or_pop("genre", data.get("genre"))
+    set_or_pop("date", str(data["year"]) if data.get("year") else None)
+    easy.save()
+
+
+@router.patch("/{track_id}")
+def update_track(track_id: int, body: TrackEditBody, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Update title, artist, album, composer, genre, and year for an owned track."""
+    track = _get_owned(db, user, track_id)
+    track.title = body.title.strip()
+    track.artist = body.artist.strip() or "Unknown Artist"
+    track.album = body.album.strip() if body.album and body.album.strip() else None
+    track.composer = body.composer.strip() if body.composer and body.composer.strip() else None
+    track.genre = body.genre.strip() if body.genre and body.genre.strip() else None
+    track.year = body.year
+
+    db.commit()
+    db.refresh(track)
+
+    try:
+        path = resolve_file(track.file_path)
+        _write_file_tags(path, {
+            "title": track.title,
+            "artist": track.artist,
+            "album": track.album,
+            "composer": track.composer,
+            "genre": track.genre,
+            "year": track.year,
+        })
+    except Exception as exc:
+        log.warning("Could not write tags to %s: %s", track.file_path, exc)
+
+    return track_out(track, user.id, user.username, detail=True)
 
 @router.post("/{track_id}/refetch")
 def refetch_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
