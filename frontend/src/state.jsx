@@ -33,6 +33,29 @@ export function DataProvider({ children }) {
   return <DataCtx.Provider value={useMemo(() => ({ version, bump }), [version, bump])}>{children}</DataCtx.Provider>;
 }
 
+/* ---------- toast notifications ---------- */
+const ToastCtx = createContext({ showToast: () => {}, dismiss: () => {}, toasts: [] });
+export const useToast = () => useContext(ToastCtx);
+
+export function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const showToast = useCallback((message, duration = 4000) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, duration);
+  }, []);
+
+  const dismiss = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const value = useMemo(() => ({ showToast, dismiss, toasts }), [showToast, dismiss, toasts]);
+
+  return <ToastCtx.Provider value={value}>{children}</ToastCtx.Provider>;
+}
+
 /* In-memory cache & in-flight promise deduplication for client fetches (client-swr-dedup) */
 const fetchCache = new Map();
 const inflightFetches = new Map();
@@ -140,6 +163,7 @@ const readStore = (key, fallback) => {
 
 export function PlayerProvider({ children }) {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const audioRef = useRef(null);
   if (audioRef.current === null) audioRef.current = new Audio();
   const [queue, setQueue] = useState([]);
@@ -202,6 +226,9 @@ export function PlayerProvider({ children }) {
         // Skip a track that is gone (deleted or unshared). Stop instead on a network drop,
         // after 3 failures in a row (e.g. expired session), or when there is nothing next.
         failures.current += 1;
+        const failed = qRef.current[iRef.current];
+        const name = failed?.title ? `"${failed.title}"` : "track";
+        showToast(`Playback failed for ${name}. Playing next track...`);
         const last = iRef.current + 1 >= qRef.current.length;
         if (a.error?.code === 2 /* MEDIA_ERR_NETWORK */ || failures.current >= 3 || last) { a.pause(); setPlaying(false); return; }
         next(false);
@@ -209,7 +236,7 @@ export function PlayerProvider({ children }) {
     };
     Object.entries(on).forEach(([e, f]) => a.addEventListener(e, f));
     return () => Object.entries(on).forEach(([e, f]) => a.removeEventListener(e, f));
-  }, [next]);
+  }, [next, showToast]);
 
   useEffect(() => {
     const a = audioRef.current;

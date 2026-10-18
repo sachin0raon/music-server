@@ -1,8 +1,8 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { Playlist, MagnifyingGlass, MusicNotes, UserCircle } from "@phosphor-icons/react";
-import { AuthProvider, DataProvider, PlayerProvider, useAuth, usePlayer } from "./state";
+import { Playlist, MagnifyingGlass, MusicNotes, UserCircle, WarningCircle, X } from "@phosphor-icons/react";
+import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, usePlayer, useToast } from "./state";
 import { useDominantColor } from "./components/Cover";
 import PlayerBar from "./components/PlayerBar";
 import MediaSessionBridge from "./components/MediaSessionBridge";
@@ -137,6 +137,43 @@ function Gate() {
   return user ? <Shell /> : <Suspense fallback={null}><Auth /></Suspense>;
 }
 
+function ToastContainer() {
+  const { toasts, dismiss } = useToast();
+  return (
+    <div
+      aria-live="polite"
+      className="pointer-events-none fixed top-[calc(1rem+env(safe-area-inset-top))] inset-x-0 z-[70] flex flex-col items-center gap-2 px-4"
+    >
+      <AnimatePresence>
+        {toasts.map((t) => (
+          <motion.div
+            key={t.id}
+            initial={{ opacity: 0, y: -16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.95 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            role="alert"
+            className="glass-raised pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl border border-line-strong px-4 py-3 shadow-2xl backdrop-blur-xl"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control bg-danger-soft text-danger">
+              <WarningCircle size={18} weight="bold" />
+            </span>
+            <p className="min-w-0 flex-1 text-small font-medium text-ink">{t.message}</p>
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="text-mute hover:text-ink -mr-1 p-1 transition-colors"
+              aria-label="Dismiss notification"
+            >
+              <X size={16} weight="bold" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -145,9 +182,12 @@ export default function App() {
       <MotionConfig reducedMotion="user">
         <AuthProvider>
           <DataProvider>
-            <PlayerProvider>
-              <Gate />
-            </PlayerProvider>
+            <ToastProvider>
+              <PlayerProvider>
+                <Gate />
+                <ToastContainer />
+              </PlayerProvider>
+            </ToastProvider>
           </DataProvider>
         </AuthProvider>
       </MotionConfig>
