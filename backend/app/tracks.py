@@ -26,9 +26,14 @@ from .access import get_visible_track, resolve_file, visible_filter
 from .auth import current_user
 from .config import settings
 from .db import get_db
+from .itunes import (
+    embed_cover_in_file,
+    enqueue_cover_fetch,
+    invalidate_negative_cache,
+    search_itunes_cover,
+)
 from .models import PlaylistTrack, Track, User
 from .ratelimit import RateLimiter
-
 log = logging.getLogger("tracks")
 router = APIRouter(prefix="/api/tracks", tags=["tracks"])
 
@@ -543,6 +548,8 @@ def get_track(track_id: int, user: User = Depends(current_user), db: DbSession =
 def stream_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
     """Serves the audio with HTTP range support, so seeking and phone buffering work."""
     track = get_visible_track(db, user, track_id)
+    if not track.cover_path:
+        enqueue_cover_fetch("track", track.id, track.title, track.album, track.artist, track.file_path, track.owner_id)
     path = resolve_file(track.file_path)
     return FileResponse(
         path,
@@ -637,6 +644,7 @@ def update_track(track_id: int, body: TrackEditBody, user: User = Depends(curren
 
     db.commit()
     db.refresh(track)
+    invalidate_negative_cache(f"track:{track.id}")
 
     try:
         path = resolve_file(track.file_path)
@@ -665,6 +673,11 @@ def refetch_track(track_id: int, user: User = Depends(current_user), db: DbSessi
         raise HTTPException(status_code=400, detail=f"Could not read audio file: {exc}")
 
     new_cover = meta.get("cover")
+    if not new_cover:
+        itunes_art = search_itunes_cover(meta["title"], meta.get("album"), meta.get("artist"))
+        if itunes_art:
+            new_cover = itunes_art
+            embed_cover_in_file(path, new_cover)
     cover_ext = _cover_ext(new_cover) if new_cover else None
     old_cover = track.cover_path
     cover_to_unlink = None

@@ -32,6 +32,12 @@ from .tracks import (
     _write_file_tags,
     walk_files,
 )
+from .itunes import (
+    apply_cover_to_server_file,
+    enqueue_cover_fetch,
+    invalidate_negative_cache,
+    search_itunes_cover,
+)
 from .tracks import _process as process_file
 
 router = APIRouter(prefix="/api/library", tags=["library"])
@@ -293,7 +299,13 @@ def refetch_file(token: str, user: User = Depends(current_user), db: DbSession =
     path = _path_for(token)
     if path is None:
         raise HTTPException(status_code=404, detail="Not found")
-    return _file_details_dict(token, path, user, db, force_reload=True)
+    d = _file_details_dict(token, path, user, db, force_reload=True)
+    if not d.get("has_cover"):
+        itunes_art = search_itunes_cover(d["title"], d.get("album"), d.get("artist"))
+        if itunes_art:
+            apply_cover_to_server_file(token, itunes_art)
+            d = _file_details_dict(token, path, user, db, force_reload=True)
+    return d
 
 
 @router.patch("/file/{token}")
@@ -318,6 +330,7 @@ def update_file_details(token: str, body: TrackEditBody, user: User = Depends(cu
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not update file tags: {exc}")
 
+    invalidate_negative_cache(f"folder:{token}")
     return _file_details_dict(token, path, user, db, force_reload=True)
 
 @router.get("/file/{token}/stream")
@@ -326,6 +339,15 @@ def stream_file(token: str, user: User = Depends(current_user)):
     path = _path_for(token)
     if path is None:
         raise HTTPException(status_code=404, detail="Not found")
+    root = _require_source()
+    rel = str(path.relative_to(root.resolve()))
+    hit = _index.get(rel)
+    has_cover = hit["meta"].get("has_cover") if hit else False
+    if not has_cover:
+        title = hit["meta"]["title"] if hit else path.stem
+        album = hit["meta"].get("album") if hit else None
+        artist = hit["meta"].get("artist") if hit else None
+        enqueue_cover_fetch("folder", token, title, album, artist, str(path))
     return FileResponse(
         path,
         media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),

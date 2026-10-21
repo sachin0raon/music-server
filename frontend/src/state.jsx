@@ -163,6 +163,7 @@ const readStore = (key, fallback) => {
 
 export function PlayerProvider({ children }) {
   const { user } = useAuth();
+  const { bump } = useData();
   const { showToast } = useToast();
   const audioRef = useRef(null);
   if (audioRef.current === null) audioRef.current = new Audio();
@@ -192,6 +193,7 @@ export function PlayerProvider({ children }) {
   shuffleRef.current = shuffle;
   repeatRef.current = repeat;
   const track = queue[index] ?? null;
+  const patchTrack = useCallback((id, patch) => setQueue((q) => q.map((t) => (t.id === id ? { ...t, ...patch } : t))), []);
 
   // Restart the current track from the top without moving through the queue.
   const restart = useCallback(() => {
@@ -246,6 +248,33 @@ export function PlayerProvider({ children }) {
     setDuration(track.duration || 0);
     a.play().catch(() => setPlaying(false));
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When a track plays without cover art, check after a short delay for background-fetched artwork
+  useEffect(() => {
+    if (!track || track.has_cover) return;
+    const isFolder = track.source === "folder";
+    const url = isFolder ? `/api/library/file/${track.id}` : `/api/tracks/${track.id}`;
+    let dead = false;
+    const timer = setTimeout(async () => {
+      try {
+        const d = await api.get(url);
+        if (!dead && d?.has_cover) {
+          const cacheBust = Date.now();
+          const cover_url = isFolder
+            ? `/api/library/file/${track.id}/cover?t=${cacheBust}`
+            : `/api/tracks/${track.id}/cover?t=${cacheBust}`;
+          patchTrack(track.id, { has_cover: true, cover_url });
+          bump();
+        }
+      } catch {
+        // silent: cover check is best-effort
+      }
+    }, 3800);
+    return () => {
+      dead = true;
+      clearTimeout(timer);
+    };
+  }, [track?.id, track?.has_cover, patchTrack, bump]);
 
   // Apply the chosen level to the element; this also restores it on first mount,
   // so a persisted volume is in place before the first play.
@@ -374,7 +403,6 @@ export function PlayerProvider({ children }) {
       setMuted(true);
     }
   }, [muted, volume]);
-  const patchTrack = useCallback((id, patch) => setQueue((q) => q.map((t) => (t.id === id ? { ...t, ...patch } : t))), []);
   const dropTrack = useCallback((id) => {
     const q = qRef.current, ix = iRef.current, i = q.findIndex((t) => t.id === id);
     if (i < 0) return;
