@@ -252,10 +252,41 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!track) { a.pause(); a.removeAttribute("src"); setTime(0); setDuration(0); return; }
-    a.src = track.stream_url ?? `/api/tracks/${track.id}/stream`;
-    setTime(0);
-    setDuration(track.duration || 0);
-    a.play().catch(() => setPlaying(false));
+
+    const targetSrc = track.stream_url ?? `/api/tracks/${track.id}/stream`;
+    const targetVol = muted ? 0 : volume;
+
+    const startNewTrack = () => {
+      a.src = targetSrc;
+      a.volume = targetVol;
+      setTime(0);
+      setDuration(track.duration || 0);
+      a.play().catch(() => setPlaying(false));
+    };
+
+    // If audio is actively playing, perform a 15ms micro-fade to zero and pause
+    // to eliminate the DC voltage pop and prevent sound driver buffer underrun
+    let interval = null;
+    if (!a.paused && a.currentTime > 0) {
+      let step = 0;
+      const initialVol = a.volume;
+      interval = setInterval(() => {
+        step += 1;
+        a.volume = Math.max(0, initialVol * (1 - step / 3));
+        if (step >= 3) {
+          clearInterval(interval);
+          interval = null;
+          a.pause();
+          startNewTrack();
+        }
+      }, 5);
+    } else {
+      startNewTrack();
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When a track plays without cover art, check after a short delay for background-fetched artwork
