@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { transition } from "../motion";
 
 // Segmented control with roving tabindex and arrow/Home/End key support
 export default function Tabs({ tabs, value, onChange, label, className = "", fullWidth = false }) {
@@ -44,7 +45,7 @@ export default function Tabs({ tabs, value, onChange, label, className = "", ful
                 layoutId={`tab-pill-${label}`}
                 aria-hidden="true"
                 className="absolute inset-0 rounded-full bg-white/15 shadow-rest"
-                transition={reduce ? { duration: 0 } : { type: "spring", damping: 30, stiffness: 400 }}
+                transition={reduce ? { duration: 0 } : transition.pill}
               />
             )}
             <span className="relative">{text}</span>

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
 import { ArrowsClockwiseIcon as ArrowsClockwise } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
@@ -146,7 +145,7 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
 
   const num = (n) => (n === null || n === undefined ? null : String(n));
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: "easeOut" }}>
+    <div>
       <div className="mb-5 flex items-start gap-4">
         <Cover track={track} className="h-20 w-20 shrink-0" rounded="rounded-2xl" />
         <div className="min-w-0 flex-1">
@@ -258,7 +257,7 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
           )}
         </>
       )}
-    </motion.div>
+    </div>
   );
 }
 

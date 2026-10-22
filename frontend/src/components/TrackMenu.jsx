@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CaretLeftIcon as CaretLeft, CheckIcon as Check, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
 import Field from "./Field";
@@ -7,6 +7,7 @@ import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import { api } from "../api";
 import { useAuth, useData, useFetch, usePlayer } from "../state";
+import { transition } from "../motion";
 
 function Item({ icon: Icon, children, onClick, danger, disabled, label }) {
   return (
@@ -62,6 +63,7 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
   const { user } = useAuth();
   const [view, setView] = useState("actions");
   const [editingDetails, setEditingDetails] = useState(false);
+  const reduce = useReducedMotion();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const isFolder = track?.source === "folder";
@@ -126,12 +128,12 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
       {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
       <AnimatePresence mode="wait" initial={false}>
         {view === "playlists" && (
-          <motion.div key="playlists" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+          <motion.div key="playlists" initial={{ opacity: 0, x: reduce ? 0 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -10 }} transition={transition.fast}>
             <PlaylistPicker track={track} onDone={onClose} />
           </motion.div>
         )}
         {view === "details" && (
-          <motion.div key="details" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+          <motion.div key="details" initial={{ opacity: 0, x: reduce ? 0 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -10 }} transition={transition.fast}>
             <TrackDetailsLoader
               trackId={track.id}
               track={track}
@@ -141,7 +143,7 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
           </motion.div>
         )}
         {view === "confirm" && (
-          <motion.div key="confirm" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+          <motion.div key="confirm" initial={{ opacity: 0, x: reduce ? 0 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -10 }} transition={transition.fast}>
             <p className="text-body text-mute">
               {track.is_shared ? "This removes the track for everyone and takes it out of their playlists. " : "This removes the track and its file from the server. "}It can't be undone.
             </p>
@@ -152,7 +154,7 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
           </motion.div>
         )}
         {view === "actions" && (
-          <motion.div key="actions" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.18 }}>
+          <motion.div key="actions" initial={{ opacity: 0, x: reduce ? 0 : -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : 10 }} transition={transition.fast}>
             <Item icon={Info} onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
             {!isFolder && (
               <>

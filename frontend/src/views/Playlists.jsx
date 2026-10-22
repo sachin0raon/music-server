@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { PlayIcon as Play, PlaylistIcon as Playlist } from "@phosphor-icons/react";
 import TrackRow from "../components/TrackRow";
 import TrackMenu from "../components/TrackMenu";
@@ -12,6 +12,7 @@ import { Button } from "../components/Button";
 import { Empty, ErrorBox, Skeleton } from "../components/States";
 import { api } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
+import { transition } from "../motion";
 
 export function PlaylistsIndex() {
   const { data, loading, error, reload } = useFetch("/api/playlists");
@@ -19,6 +20,7 @@ export function PlaylistsIndex() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
+  const reduce = useReducedMotion();
 
   const create = async (e) => {
     e.preventDefault();
@@ -40,8 +42,8 @@ export function PlaylistsIndex() {
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
           {data.map((p, i) => (
-            <motion.li key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: Math.min(i, 12) * 0.03 }}>
+            <motion.li key={p.id} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
+              transition={reduce ? { duration: 0 } : { ...transition.base, delay: i < 12 ? i * 0.03 : 0 }}>
               <Link to={`/playlists/${p.id}`} className="glass interactive block rounded-card p-3 transition-transform duration-[220ms] ease-out hover:-translate-y-0.5">
                 <PlaylistArt id={p.id} className="aspect-square w-full" />
                 <span className="mt-3 block truncate text-body font-medium">{p.name}</span>

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { CaretDownIcon as CaretDown, CaretUpIcon as CaretUp, CheckIcon as Check, DotsThreeIcon as DotsThree, PlayIcon as Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
@@ -7,6 +7,7 @@ import EqBars from "./EqBars";
 import { IconButton } from "./Button";
 import { fmt } from "../api";
 import { usePlayer } from "../state";
+import { transition } from "../motion";
 
 // Pure memoized track row: skips re-rendering when other rows change (rerender-memo)
 const PureTrackRow = memo(function PureTrackRow({
@@ -15,9 +16,10 @@ const PureTrackRow = memo(function PureTrackRow({
   active = false, eq = false, onPlay
 }) {
   const isFolder = track.source === "folder";
+  const reduce = useReducedMotion();
   return (
-    <motion.li ref={rowRef} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 12) * 0.022 }}
+    <motion.li ref={rowRef} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
+      transition={reduce ? { duration: 0 } : { ...transition.base, delay: index < 12 ? index * 0.022 : 0 }}
       className={`track-row-item group relative flex items-center gap-1 pr-2 transition-[background-color] duration-[160ms] sm:pr-3 ${active ? "bg-accent-soft" : selected ? "bg-white/[0.08]" : "hover:bg-white/[0.05] focus-within:bg-white/[0.05]"}`}>
       {selectable && (
         <button type="button" role="checkbox" aria-checked={selected} aria-label={`Select ${track.title}`}

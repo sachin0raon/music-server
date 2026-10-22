@@ -6,6 +6,7 @@ import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, use
 import { useDominantColor } from "./components/Cover";
 import PlayerBar from "./components/PlayerBar";
 import MediaSessionBridge from "./components/MediaSessionBridge";
+import { transition } from "./motion";
 
 // Dynamic imports for routes and heavy dialogs to optimize bundle size (bundle-dynamic-imports)
 const Auth = lazy(() => import("./views/Auth"));
@@ -70,7 +71,7 @@ function Shell() {
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => `relative flex min-h-11 items-center gap-3 rounded-full px-3 text-body transition-colors duration-[160ms] hover:bg-white/[0.06] hover:text-ink ${isActive ? "bg-white/10 font-medium text-ink" : "text-mute"}`}>
               {({ isActive }) => <>
-                {isActive && <motion.span layoutId="sidebar-active" aria-hidden="true" className="absolute -left-2 h-5 w-[3px] rounded-full bg-accent" transition={{ type: "spring", damping: 30, stiffness: 400 }} />}
+                {isActive && <motion.span layoutId="sidebar-active" aria-hidden="true" className="absolute -left-2 h-5 w-[3px] rounded-full bg-accent" transition={transition.pill} />}
                 <Icon size={22} weight={isActive ? "fill" : "regular"} className={isActive ? "text-accent" : ""} />{label}
               </>}
             </NavLink>
@@ -85,7 +86,7 @@ function Shell() {
           <AnimatePresence mode="wait">
             <motion.div key={pathname}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}>
+              transition={transition.base}>
               <Suspense fallback={null}>
                 <Routes location={location}>
                   <Route path="/" element={<Page><Library /></Page>} />
@@ -108,7 +109,7 @@ function Shell() {
           <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-micro font-medium transition-colors duration-[160ms] ${isActive ? "text-ink" : "text-mute"}`}>
             {({ isActive }) => <>
               <span className={`relative grid h-8 w-14 place-items-center rounded-full ${isActive ? "text-accent" : ""}`}>
-                {isActive && <motion.span layoutId="nav-active" aria-hidden="true" className="absolute inset-0 rounded-full bg-accent-soft" transition={{ type: "spring", damping: 30, stiffness: 400 }} />}
+                {isActive && <motion.span layoutId="nav-active" aria-hidden="true" className="absolute inset-0 rounded-full bg-accent-soft" transition={transition.pill} />}
                 <Icon size={24} weight={isActive ? "fill" : "regular"} className="relative" />
               </span>
               {label}
@@ -151,7 +152,7 @@ function ToastContainer() {
             initial={{ opacity: 0, y: -16, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.95 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            transition={transition.base}
             role="alert"
             className="glass-raised pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl border border-line-strong px-4 py-3 shadow-2xl backdrop-blur-xl"
           >

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CaretUpIcon as CaretUp } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import GlassPanel from "./GlassPanel";
@@ -8,11 +8,13 @@ import PlayerControls from "./PlayerControls";
 import SeekBar, { MiniProgress } from "./SeekBar";
 import { SpeakerIcon, VolumePanel, useVolumeLevel } from "./VolumeControl";
 import { usePlayer } from "../state";
+import { transition } from "../motion";
 
 // `track` comes in as a prop (not from context) so AnimatePresence can finish the
 // exit animation with the last track still on screen after playback stops.
 export default function PlayerBar({ track }) {
   const { setOpen } = usePlayer();
+  const reduce = useReducedMotion();
   const level = useVolumeLevel();
   const [volOpen, setVolOpen] = useState(false);
   const volRef = useRef(null);
@@ -30,8 +32,8 @@ export default function PlayerBar({ track }) {
   return (
     <motion.div
       className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:bottom-4 lg:left-60"
-      initial={{ y: 96, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 96, opacity: 0 }}
-      transition={{ type: "spring", damping: 30, stiffness: 320 }}>
+      initial={{ y: reduce ? 0 : 96, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: reduce ? 0 : 96, opacity: 0 }}
+      transition={transition.bar}>
       {/* The popover is a sibling of the bar, not a child: the bar clips its own
           contents (overflow-hidden, for MiniProgress), so a child would be cut off. */}
       <div ref={volRef} className="relative mx-auto max-w-2xl md:max-w-3xl xl:max-w-4xl">
@@ -57,8 +59,8 @@ export default function PlayerBar({ track }) {
         </GlassPanel>
         <AnimatePresence>
           {volOpen && (
-            <motion.div key="vol" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
-              transition={{ type: "spring", damping: 30, stiffness: 320 }}
+            <motion.div key="vol" initial={{ opacity: 0, y: reduce ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduce ? 0 : 6 }}
+              transition={transition.fast}
               className="absolute right-3 bottom-[calc(100%+0.5rem)] z-10">
               <VolumePanel />
             </motion.div>

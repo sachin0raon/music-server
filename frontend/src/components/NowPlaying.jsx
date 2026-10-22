@@ -11,6 +11,7 @@ import SeekBar from "./SeekBar";
 import VolumeRow from "./VolumeControl";
 import { api, fmt, fmtBitrate, fmtHz } from "../api";
 import { useData, useFetch, usePlayer } from "../state";
+import { transition } from "../motion";
 
 export default function NowPlaying() {
   const { track, queue, index, next, setOpen, patchTrack, repeat } = usePlayer();
@@ -64,7 +65,7 @@ export default function NowPlaying() {
   return (
     <motion.div ref={root} className="fixed inset-0 z-40 overflow-hidden bg-ground" role="dialog" aria-modal="true" aria-label="Now playing"
       initial={{ y: reduce ? 0 : "100%" }} animate={{ y: 0 }} exit={{ y: reduce ? 0 : "100%" }}
-      transition={{ type: "spring", damping: 34, stiffness: 300 }}>
+      transition={transition.sheet}>
       {/* The glow layer is tied to the viewport, so it must not sit inside the
           scroller: only the content scrolls, and the background stays put. */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -82,10 +83,14 @@ export default function NowPlaying() {
           </div>
 
           <div className="flex flex-1 flex-col gap-6 [@media(max-height:500px)]:gap-3 lg:grid lg:grid-cols-2 lg:items-center lg:gap-16">
-            <motion.div key={track.id} initial={{ scale: reduce ? 1 : 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", damping: 26, stiffness: 260 }} className="self-center lg:justify-self-end">
-              <Cover track={track} rounded="rounded-[28px]" eager className="h-[min(350px,calc(100vw-2.5rem),40dvh)] w-[min(350px,calc(100vw-2.5rem),40dvh)] shadow-float lg:h-[min(440px,62dvh)] lg:w-[min(440px,62dvh)]" />
-            </motion.div>
+            <div className="relative self-center lg:justify-self-end">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div key={track.id} initial={{ scale: reduce ? 1 : 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: reduce ? 1 : 0.96, opacity: 0 }}
+                  transition={transition.base}>
+                  <Cover track={track} rounded="rounded-[28px]" eager className="h-[min(350px,calc(100vw-2.5rem),40dvh)] w-[min(350px,calc(100vw-2.5rem),40dvh)] shadow-float lg:h-[min(440px,62dvh)] lg:w-[min(440px,62dvh)]" />
+                </motion.div>
+              </AnimatePresence>
+            </div>
 
             <div className="flex flex-col gap-6 [@media(max-height:500px)]:gap-3 lg:max-w-md">
               <div className="flex items-start justify-between gap-3">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, PlayIcon as Play } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
 import TrackRow from "./TrackRow";
@@ -8,6 +8,7 @@ import GlassPanel from "./GlassPanel";
 import { Button, IconButton } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
 import { useFetch, usePlayer, useTracks } from "../state";
+import { transition } from "../motion";
 
 // Used by Library (scope mine/shared) and Search (scope all + q)
 export default function TrackList({ scope, q, empty, featured, onTotal, sort = "added_desc" }) {
@@ -15,6 +16,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
   const { data: newest } = useFetch(featured ? `/api/tracks?scope=${scope}&sort=added_desc&limit=1` : null);
   const { playTrack, track: current, playing } = usePlayer();
   const [menu, setMenu] = useState(null);
+  const reduce = useReducedMotion();
 
   // Let the parent show the scope's total (Library puts it under the header).
   // Only once loaded, so a count of 0 never flashes before the real number.
@@ -34,8 +36,8 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
     <>
       {latest && (
         // The card is tinted from its own cover, so the list below reads as one piece with it
-        <GlassPanel as={motion.section} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+        <GlassPanel as={motion.section} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
+          transition={transition.slow}
           className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6"
           style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.045))` }}>
           <Cover track={latest} eager className="h-[122px] w-[122px] shadow-lift sm:h-[184px] sm:w-[184px]" rounded="rounded-2xl" />
