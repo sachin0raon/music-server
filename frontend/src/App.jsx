@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { Playlist, MagnifyingGlass, MusicNotes, UserCircle, WarningCircle, X } from "@phosphor-icons/react";
+import { PlaylistIcon as Playlist, MagnifyingGlassIcon as MagnifyingGlass, MusicNotesIcon as MusicNotes, UserCircleIcon as UserCircle, WarningCircleIcon as WarningCircle, XIcon as X } from "@phosphor-icons/react";
 import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, usePlayer, useToast } from "./state";
 import { useDominantColor } from "./components/Cover";
 import PlayerBar from "./components/PlayerBar";

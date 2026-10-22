@@ -230,7 +230,7 @@ export function PlayerProvider({ children }) {
       play: () => setPlaying(true),
       pause: () => setPlaying(false),
       timeupdate: () => setTime(a.currentTime),
-      loadedmetadata: () => isFinite(a.duration) && setDuration(a.duration),
+      loadedmetadata: () => Number.isFinite(a.duration) && setDuration(a.duration),
       ended: () => next(true),
       playing: () => { failures.current = 0; },
       error: () => {

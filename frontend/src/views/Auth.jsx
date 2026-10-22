@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeSlash, MusicNotes } from "@phosphor-icons/react";
+import { EyeIcon as Eye, EyeSlashIcon as EyeSlash, MusicNotesIcon as MusicNotes } from "@phosphor-icons/react";
 import GlassPanel from "../components/GlassPanel";
 import Tabs from "../components/Tabs";
 import Field from "../components/Field";

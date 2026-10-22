@@ -1,4 +1,4 @@
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretDownIcon as CaretDown } from "@phosphor-icons/react";
 
 // Options match the backend's whitelisted `sort` values (backend/app/tracks.py SORT_ORDER)
 export const SORTS = [

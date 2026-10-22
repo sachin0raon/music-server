@@ -1,4 +1,4 @@
-import { MusicNotes, WarningCircle } from "@phosphor-icons/react";
+import { MusicNotesIcon as MusicNotes, WarningCircleIcon as WarningCircle } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import { Button } from "./Button";
 

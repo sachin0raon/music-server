@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowsClockwise, PencilSimple } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
 import Field from "./Field";
-import { Button, IconButton } from "./Button";
+import { Button } from "./Button";
 import { Skeleton, ErrorBox } from "./States";
 import { api, fmt, fmtBitrate, fmtChannels, fmtDate, fmtHz, fmtSize } from "../api";
 import { useAuth, useData, useFetch, usePlayer } from "../state";
@@ -64,7 +64,6 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
 
   const isFolder = track.source === "folder";
   const canRefetch = isFolder || track.owned;
-  const canEdit = isFolder ? Boolean(user?.is_admin) : Boolean(track.owned);
 
   const startEditing = () => {
     setForm({

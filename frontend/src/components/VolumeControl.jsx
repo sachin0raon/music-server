@@ -1,4 +1,4 @@
-import { SpeakerHigh, SpeakerLow, SpeakerSlash } from "@phosphor-icons/react";
+import { SpeakerHighIcon as SpeakerHigh, SpeakerLowIcon as SpeakerLow, SpeakerSlashIcon as SpeakerSlash } from "@phosphor-icons/react";
 import { IconButton } from "./Button";
 import GlassPanel from "./GlassPanel";
 import { usePlayer } from "../state";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MusicNote } from "@phosphor-icons/react";
+import { MusicNoteIcon as MusicNote } from "@phosphor-icons/react";
 
 const TONES = ["#1E4F5C", "#5A3A2E", "#2E4A3F", "#4A4A52", "#3C4A2D", "#2D4A5A", "#26407A"];
 const hash = (text) => { let h = 0; for (let i = 0; i < text.length; i += 1) h = (h * 31 + text.charCodeAt(i)) | 0; return Math.abs(h); };

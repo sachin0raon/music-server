@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretUp } from "@phosphor-icons/react";
+import { CaretUpIcon as CaretUp } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import GlassPanel from "./GlassPanel";
 import { IconButton } from "./Button";

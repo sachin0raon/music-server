@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import useFocusTrap from "./useFocusTrap";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CaretDown, DotsThree, Queue } from "@phosphor-icons/react";
+import { CaretDownIcon as CaretDown, DotsThreeIcon as DotsThree, QueueIcon as Queue } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
 import TrackMenu from "./TrackMenu";
 import QueueSheet from "./QueueSheet";

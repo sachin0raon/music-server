@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon as MagnifyingGlass } from "@phosphor-icons/react";
 import TrackList from "../components/TrackList";
 import PageHeader from "../components/PageHeader";
 import Field from "../components/Field";

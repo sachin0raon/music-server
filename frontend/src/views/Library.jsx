@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { FolderOpen, MagnifyingGlass, MusicNotes, Plus, ShareNetwork, X } from "@phosphor-icons/react";
+import { FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, MusicNotesIcon as MusicNotes, PlusIcon as Plus, ShareNetworkIcon as ShareNetwork, XIcon as X } from "@phosphor-icons/react";
 import TrackList from "../components/TrackList";
 import FolderList from "../components/FolderList";
 import PageHeader from "../components/PageHeader";

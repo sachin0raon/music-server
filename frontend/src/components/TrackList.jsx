@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowsClockwise, CaretDown, Play } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, PlayIcon as Play } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";

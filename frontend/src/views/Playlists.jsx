@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Play, Playlist } from "@phosphor-icons/react";
+import { PlayIcon as Play, PlaylistIcon as Playlist } from "@phosphor-icons/react";
 import TrackRow from "../components/TrackRow";
 import TrackMenu from "../components/TrackMenu";
 import PageHeader, { BackLink } from "../components/PageHeader";

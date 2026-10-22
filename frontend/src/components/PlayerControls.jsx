@@ -1,4 +1,4 @@
-import { Pause, Play, Repeat, RepeatOnce, Shuffle, SkipBack, SkipForward } from "@phosphor-icons/react";
+import { PauseIcon as Pause, PlayIcon as Play, RepeatIcon as Repeat, RepeatOnceIcon as RepeatOnce, ShuffleIcon as Shuffle, SkipBackIcon as SkipBack, SkipForwardIcon as SkipForward } from "@phosphor-icons/react";
 import { IconButton } from "./Button";
 import { usePlayer } from "../state";
 

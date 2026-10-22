@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Playlist } from "@phosphor-icons/react";
+import { PlaylistIcon as Playlist } from "@phosphor-icons/react";
 import { api } from "../api";
 import Cover, { toneFor } from "./Cover";
 

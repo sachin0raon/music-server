@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen } from "@phosphor-icons/react";
+import { FolderOpenIcon as FolderOpen } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import ImportResults from "./ImportResults";

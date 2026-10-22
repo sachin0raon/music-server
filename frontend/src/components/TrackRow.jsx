@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { motion } from "motion/react";
-import { CaretDown, CaretUp, Check, DotsThree, Play } from "@phosphor-icons/react";
+import { CaretDownIcon as CaretDown, CaretUpIcon as CaretUp, CheckIcon as Check, DotsThreeIcon as DotsThree, PlayIcon as Play } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
 import EqBars from "./EqBars";

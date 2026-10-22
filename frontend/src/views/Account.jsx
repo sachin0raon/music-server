@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SignOut } from "@phosphor-icons/react";
+import { SignOutIcon as SignOut } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
 import Field from "../components/Field";

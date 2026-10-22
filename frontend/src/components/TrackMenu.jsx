@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretLeft, Check, Info, ListPlus, MinusCircle, PencilSimple, ShareNetwork, Trash } from "@phosphor-icons/react";
+import { CaretLeftIcon as CaretLeft, CheckIcon as Check, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
 import Field from "./Field";
 import { Button, IconButton } from "./Button";

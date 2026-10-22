@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, UploadSimple, WarningCircle } from "@phosphor-icons/react";
+import { CheckIcon as Check, UploadSimpleIcon as UploadSimple, WarningCircleIcon as WarningCircle } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
 import LinkImport from "../components/LinkImport";

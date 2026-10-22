@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileAudio, LinkSimple } from "@phosphor-icons/react";
+import { FileAudioIcon as FileAudio, LinkSimpleIcon as LinkSimple } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import Field from "./Field";
 import { Button } from "./Button";
@@ -66,8 +66,8 @@ export default function LinkImport() {
         setFilename("");
         bump();
       }
-    } catch (e) {
-      setErr(e.message);
+    } catch (err) {
+      setErr(err.message);
     } finally {
       setBusy(false);
     }

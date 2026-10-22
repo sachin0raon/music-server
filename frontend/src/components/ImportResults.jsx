@@ -1,4 +1,4 @@
-import { Check, WarningCircle } from "@phosphor-icons/react";
+import { CheckIcon as Check, WarningCircleIcon as WarningCircle } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 
 const LABEL = { ok: "Added", duplicate: "Already in your library", error: "Failed" };

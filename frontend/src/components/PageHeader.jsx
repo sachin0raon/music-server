@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CaretLeft } from "@phosphor-icons/react";
+import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react";
 
 export function BackLink({ to, children }) {
   return (

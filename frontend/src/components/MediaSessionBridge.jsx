@@ -50,7 +50,7 @@ export default function MediaSessionBridge() {
   // About once a second, so the lock screen scrubber stays in step
   const whole = Math.floor(time);
   useEffect(() => {
-    if (!ms?.setPositionState || !track || !isFinite(duration) || duration <= 0) return;
+    if (!ms?.setPositionState || !track || !Number.isFinite(duration) || duration <= 0) return;
     try { ms.setPositionState({ duration, playbackRate: 1, position: Math.min(time, duration) }); } catch { /* ignore */ }
   }, [ms, track?.id, whole, duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
