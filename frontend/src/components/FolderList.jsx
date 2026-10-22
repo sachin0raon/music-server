@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowsClockwise, FolderOpen, MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowsClockwise, CaretDown, FolderOpen, MagnifyingGlass } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
@@ -177,7 +177,24 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
       </GlassPanel>
 
       {err && <p role="alert" className="mt-3 text-small text-danger">{err}</p>}
-      {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}
+      {items.length < total && (
+        <div className="mt-4 flex justify-center">
+          <IconButton
+            variant="glass"
+            size="md"
+            onClick={loadMore}
+            disabled={busy}
+            label={busy ? "Loading more tracks" : "Show more tracks"}
+            className="shadow-lift hover:scale-105 active:scale-95 transition-transform"
+          >
+            {busy ? (
+              <ArrowsClockwise size={20} weight="bold" className="animate-spin" />
+            ) : (
+              <CaretDown size={20} weight="bold" />
+            )}
+          </IconButton>
+        </div>
+      )}
 
       {results && <ImportResults items={results} />}
       <AnimatePresence>{menuTrack && <TrackMenu key="menu" track={menuTrack} onClose={() => setMenuTrack(null)} />}</AnimatePresence>

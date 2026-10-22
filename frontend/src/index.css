@@ -162,6 +162,7 @@ body {
 .track-row-item {
   content-visibility: auto;
   contain-intrinsic-size: 0 64px;
+  border-color: color-mix(in oklab, var(--color-line) 40%, transparent);
 }
 
 /* Player mode toggles (shuffle, repeat): pressed = the mode is on. The hover rule

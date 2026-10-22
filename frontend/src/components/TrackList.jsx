@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Play } from "@phosphor-icons/react";
+import { ArrowsClockwise, CaretDown, Play } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
 import GlassPanel from "./GlassPanel";
-import { Button } from "./Button";
+import { Button, IconButton } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
 import { useFetch, usePlayer, useTracks } from "../state";
 
@@ -71,7 +71,24 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
         })}
       </GlassPanel>
       {error && <p role="alert" className="mt-3 text-small text-danger">{error}</p>}
-      {items.length < total && <Button onClick={loadMore} disabled={busy} className="mt-4 w-full">{busy ? "Loading" : "Show more"}</Button>}
+      {items.length < total && (
+        <div className="mt-4 flex justify-center">
+          <IconButton
+            variant="glass"
+            size="md"
+            onClick={loadMore}
+            disabled={busy}
+            label={busy ? "Loading more tracks" : "Show more tracks"}
+            className="shadow-lift hover:scale-105 active:scale-95 transition-transform"
+          >
+            {busy ? (
+              <ArrowsClockwise size={20} weight="bold" className="animate-spin" />
+            ) : (
+              <CaretDown size={20} weight="bold" />
+            )}
+          </IconButton>
+        </div>
+      )}
       <AnimatePresence>{menu && <TrackMenu key="menu" track={menu} onClose={() => setMenu(null)} />}</AnimatePresence>
     </>
   );
