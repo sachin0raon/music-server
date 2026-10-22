@@ -18,7 +18,7 @@ export default function Sheet({ title, header, onClose, fullScreen = false, chil
     <motion.div ref={root} className={`fixed inset-0 z-50 flex items-end justify-center ${fullScreen ? "" : "lg:pl-60"}`} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Dialog"}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={transition.base}>
-      <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+      <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60 sm:backdrop-blur-[2px]" />
       <motion.div className="glass-overlay relative max-h-[85dvh] w-full max-w-xl overflow-y-auto rounded-t-[28px] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3"
         initial={{ y: reduce ? 0 : "100%" }} animate={{ y: 0 }} exit={{ y: reduce ? 0 : "100%" }}
         transition={transition.sheet}>

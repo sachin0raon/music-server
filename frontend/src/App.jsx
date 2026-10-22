@@ -25,7 +25,6 @@ const NAV = [
   { to: "/account", label: "Account", icon: UserCircle },
 ];
 
-// Soft colour glow behind everything; it takes its tone from the playing cover
 function Ambient() {
   const { track } = usePlayer();
   const color = useDominantColor(track);
@@ -154,7 +153,7 @@ function ToastContainer() {
             exit={{ opacity: 0, y: -12, scale: 0.95 }}
             transition={transition.base}
             role="alert"
-            className="glass-raised pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl border border-line-strong px-4 py-3 shadow-2xl backdrop-blur-xl"
+            className="glass-raised pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl border border-line-strong px-4 py-3 shadow-2xl"
           >
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control bg-danger-soft text-danger">
               <WarningCircle size={18} weight="bold" />
