@@ -3,6 +3,7 @@ import useFocusTrap from "./useFocusTrap";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CaretDownIcon as CaretDown, DotsThreeIcon as DotsThree, QueueIcon as Queue } from "@phosphor-icons/react";
 import Cover, { useDominantColor } from "./Cover";
+import Chip from "./Chip";
 import TrackMenu from "./TrackMenu";
 import QueueSheet from "./QueueSheet";
 import { Button, IconButton } from "./Button";
@@ -68,10 +69,13 @@ export default function NowPlaying() {
       transition={transition.sheet}>
       {/* The glow layer is tied to the viewport, so it must not sit inside the
           scroller: only the content scrolls, and the background stays put. */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-10 -top-20 h-[460px] w-[460px] rounded-full opacity-75 blur-[90px] transition-colors duration-1000" style={{ background: color }} />
-        <div className="absolute -right-36 bottom-0 h-[340px] w-[340px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
-      </div>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 transition-[background] duration-1000"
+        style={{
+          background: `radial-gradient(ellipse 80% 55% at 0% 0%, color-mix(in srgb, ${color} 50%, transparent) 0%, transparent 75%), radial-gradient(ellipse 65% 50% at 100% 100%, color-mix(in srgb, var(--color-glow-b) 40%, transparent) 0%, transparent 70%), var(--color-ground)`,
+        }}
+      />
       <div className="relative h-full overflow-y-auto">
         <div className="mx-auto flex min-h-full max-w-md flex-col gap-6 [@media(max-height:500px)]:gap-3 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(1.25rem+env(safe-area-inset-top))] lg:max-w-5xl">
           <div className="flex items-center justify-between">
@@ -102,7 +106,7 @@ export default function NowPlaying() {
                 </div>
                 {isFolder ? (
                   track.in_library ? (
-                    <span className="shrink-0 text-small text-mute">In your library</span>
+                    <Chip variant="soft" className="shrink-0">In your library</Chip>
                   ) : (
                     <Button variant="accent" onClick={importThis} disabled={importing} className="shrink-0">
                       {importing ? "Importing" : "Import this"}

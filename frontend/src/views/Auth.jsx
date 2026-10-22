@@ -67,10 +67,13 @@ export default function Auth() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-10 -top-20 h-[460px] w-[460px] rounded-full bg-glow-a opacity-75 blur-[90px]" />
-        <div className="absolute -right-36 bottom-0 h-[340px] w-[340px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
-      </div>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(ellipse 80% 55% at 0% 0%, color-mix(in srgb, var(--color-glow-a) 50%, transparent) 0%, transparent 75%), radial-gradient(ellipse 65% 50% at 100% 100%, color-mix(in srgb, var(--color-glow-b) 40%, transparent) 0%, transparent 70%), var(--color-ground)`,
+        }}
+      />
       {/* Phones: one column. Desktop: the intro sits beside the form instead of floating above it. */}
       <main className="relative mx-auto flex min-h-[100dvh] max-w-md flex-col justify-start pt-12 pb-10 gap-7 px-[max(1.25rem,env(safe-area-inset-left))] lg:max-w-4xl lg:grid lg:grid-cols-2 lg:grid-rows-1 lg:items-start lg:gap-16 lg:py-0">
         <div className="lg:self-center">

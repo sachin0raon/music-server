@@ -28,11 +28,15 @@ const NAV = [
 function Ambient() {
   const { track } = usePlayer();
   const color = useDominantColor(track);
+  const activeTone = track ? color : "var(--color-glow-a)";
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-      <div className="absolute -left-10 -top-20 h-[460px] w-[460px] rounded-full opacity-75 blur-[90px] transition-colors duration-1000" style={{ background: track ? color : "var(--color-glow-a)" }} />
-      <div className="absolute -right-36 bottom-0 h-[340px] w-[340px] rounded-full bg-glow-b opacity-55 blur-[90px]" />
-    </div>
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 -z-10 transition-[background] duration-1000"
+      style={{
+        background: `radial-gradient(ellipse 80% 55% at 0% 0%, color-mix(in srgb, ${activeTone} 50%, transparent) 0%, transparent 75%), radial-gradient(ellipse 65% 50% at 100% 100%, color-mix(in srgb, var(--color-glow-b) 40%, transparent) 0%, transparent 70%), var(--color-ground)`,
+      }}
+    />
   );
 }
 
@@ -44,12 +48,6 @@ function Page({ children }) {
   return children;
 }
 
-// Faint noise film over the page. Dark gradients quantise into visible bands on an
-// 8-bit display; this dithers them away. It sits above page content and the now
-// playing view (both have big dark gradients) but below sheets, which are opaque.
-function Grain() {
-  return <div aria-hidden="true" className="grain pointer-events-none fixed inset-0 z-[45]" />;
-}
 
 function Shell() {
   const { open, track } = usePlayer();
@@ -59,7 +57,6 @@ function Shell() {
     <div className="isolate min-h-[100dvh]">
       <a href="#main" className="glass-raised fixed left-3 top-3 z-[60] -translate-y-20 rounded-full px-4 py-2 text-small font-medium focus:translate-y-0">Skip to content</a>
       <Ambient />
-      <Grain />
       <MediaSessionBridge />
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col gap-1 p-5 lg:flex">
         <div className="mb-6 flex items-center gap-2.5 px-3">
