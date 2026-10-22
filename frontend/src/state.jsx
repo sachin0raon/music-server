@@ -118,8 +118,16 @@ export function useTracks(scope, q = "", sort = "added_desc") {
   const [s, setS] = useState({ items: [], total: 0, loading: true, error: null, busy: false });
   const [tick, setTick] = useState(0);
   const gen = useRef(0); // bumped on every reset, so a late 'Show more' response can be dropped
-  const params = (offset) => {
-    const p = new URLSearchParams({ scope, sort, limit: "50", offset: String(offset) });
+  const countRef = useRef(50);
+  countRef.current = Math.max(50, s.items.length);
+  const prevFilter = useRef(scope + q + sort);
+  if (prevFilter.current !== scope + q + sort) {
+    prevFilter.current = scope + q + sort;
+    countRef.current = 50;
+  }
+
+  const params = (offset, limit = 50) => {
+    const p = new URLSearchParams({ scope, sort, limit: String(limit), offset: String(offset) });
     if (q) p.set("q", q);
     return `/api/tracks?${p}`;
   };
@@ -127,7 +135,8 @@ export function useTracks(scope, q = "", sort = "added_desc") {
     let live = true;
     gen.current += 1;
     setS((p) => ({ ...p, loading: p.items.length === 0, error: null, busy: false }));
-    api.get(params(0))
+    const limit = countRef.current;
+    api.get(params(0, limit))
       .then((d) => live && setS({ items: d.items, total: d.total, loading: false, error: null, busy: false }))
       .catch((e) => live && setS((p) => ({ ...p, loading: false, error: e.message })));
     return () => { live = false; };
@@ -136,7 +145,7 @@ export function useTracks(scope, q = "", sort = "added_desc") {
     const g = gen.current;
     setS((p) => ({ ...p, busy: true }));
     try {
-      const d = await api.get(params(s.items.length));
+      const d = await api.get(params(s.items.length, 50));
       if (g !== gen.current) return;
       setS((p) => ({ ...p, items: [...p.items, ...d.items], total: d.total, busy: false }));
     } catch (e) {

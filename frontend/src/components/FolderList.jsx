@@ -29,9 +29,16 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
   const [results, setResults] = useState(null);
   const [menuTrack, setMenuTrack] = useState(null);
   const gen = useRef(0); // bumped on every refresh, so a late "Show more" response is dropped
+  const countRef = useRef(PAGE);
+  countRef.current = Math.max(PAGE, items.length);
+  const prevFilter = useRef(sort + q);
+  if (prevFilter.current !== sort + q) {
+    prevFilter.current = sort + q;
+    countRef.current = PAGE;
+  }
 
-  const page = (offset) => {
-    const params = { sort, limit: String(PAGE), offset: String(offset) };
+  const page = (offset, limit = PAGE) => {
+    const params = { sort, limit: String(limit), offset: String(offset) };
     if (q) params.q = q;
     return `/api/library/files?${new URLSearchParams(params)}`;
   };
@@ -39,8 +46,9 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
   const load = useCallback(() => {
     gen.current += 1;
     const g = gen.current;
+    const limit = countRef.current;
     setLoading(items.length === 0); setErr(""); setResults(null); setSelected(new Set());
-    api.get(page(0))
+    api.get(page(0, limit))
       .then((d) => { if (g === gen.current) { setItems(d.items); setTotal(d.total); setLoading(false); } })
       .catch((e) => { if (g === gen.current) { setErr(e.message); setLoading(false); } });
   }, [sort, q, version]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -52,7 +60,7 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
     const g = gen.current;
     setBusy(true); setErr("");
     try {
-      const d = await api.get(page(items.length));
+      const d = await api.get(page(items.length, PAGE));
       if (g !== gen.current) return;
       setItems((p) => [...p, ...d.items]);
       setTotal(d.total);

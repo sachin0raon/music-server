@@ -16,8 +16,10 @@ const PureTrackRow = memo(function PureTrackRow({
 }) {
   const isFolder = track.source === "folder";
   return (
-    <motion.li ref={rowRef} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 12) * 0.022 }}
+    <motion.li ref={rowRef}
+      initial={index < 12 ? { opacity: 0, y: 8 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: index < 12 ? index * 0.022 : 0 }}
       className={`track-row-item group relative flex items-center gap-1 pr-2 transition-colors duration-[160ms] sm:pr-3 ${active ? "bg-accent-soft" : selected ? "bg-white/[0.08]" : "hover:bg-white/[0.05] focus-within:bg-white/[0.05]"}`}>
       {selectable && (
         <button type="button" role="checkbox" aria-checked={selected} aria-label={`Select ${track.title}`}

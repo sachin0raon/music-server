@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretLeft, Check, Info, ListPlus, MinusCircle, ShareNetwork, Trash } from "@phosphor-icons/react";
+import { CaretLeft, Check, Info, ListPlus, MinusCircle, PencilSimple, ShareNetwork, Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
 import Field from "./Field";
 import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import { api } from "../api";
-import { useData, useFetch, usePlayer } from "../state";
+import { useAuth, useData, useFetch, usePlayer } from "../state";
 
 function Item({ icon: Icon, children, onClick, danger, disabled, label }) {
   return (
@@ -59,11 +59,13 @@ function PlaylistPicker({ track, onDone }) {
 export default function TrackMenu({ track, onClose, playlistId, fullScreen = false }) {
   const { bump } = useData();
   const { patchTrack, dropTrack } = usePlayer();
+  const { user } = useAuth();
   const [view, setView] = useState("actions");
+  const [editingDetails, setEditingDetails] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const isFolder = track?.source === "folder";
-
+  const canEdit = isFolder ? Boolean(user?.is_admin) : Boolean(track?.owned);
   const run = async (fn) => {
     setBusy(true); setErr("");
     try { await fn(); bump(); onClose(); } catch (e) { setErr(e.message); setBusy(false); }
@@ -85,15 +87,37 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
     }
   });
 
-  const titleText = view === "details" ? "Track details" : view === "playlists" ? "Add to playlist" : view === "confirm" ? "Delete track" : track.title;
+  const titleText = view === "details" ? (editingDetails ? "Edit details" : "Track details") : view === "playlists" ? "Add to playlist" : view === "confirm" ? "Delete track" : track.title;
   const header = (
-    <div className="mb-3 flex items-center gap-2">
-      {view !== "actions" && (
-        <IconButton label="Back" variant="ghost" size="sm" onClick={() => setView("actions")} className="-ml-1 text-mute hover:text-ink">
-          <CaretLeft size={20} weight="bold" />
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        {view !== "actions" && (
+          <IconButton
+            label="Back"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (editingDetails) setEditingDetails(false);
+              else setView("actions");
+            }}
+            className="-ml-1 text-mute hover:text-ink"
+          >
+            <CaretLeft size={20} weight="bold" />
+          </IconButton>
+        )}
+        <h2 className="truncate text-heading font-semibold">{titleText}</h2>
+      </div>
+      {view === "details" && canEdit && !editingDetails && (
+        <IconButton
+          variant="glass"
+          size="sm"
+          onClick={() => setEditingDetails(true)}
+          className="shrink-0 text-mute hover:text-ink"
+          label={`Edit details for ${track.title}`}
+        >
+          <PencilSimple size={18} weight="bold" />
         </IconButton>
       )}
-      <h2 className="truncate text-heading font-semibold">{titleText}</h2>
     </div>
   );
 
@@ -108,7 +132,12 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
         )}
         {view === "details" && (
           <motion.div key="details" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
-            <TrackDetailsLoader trackId={track.id} track={track} />
+            <TrackDetailsLoader
+              trackId={track.id}
+              track={track}
+              editing={editingDetails}
+              onEditingChange={setEditingDetails}
+            />
           </motion.div>
         )}
         {view === "confirm" && (

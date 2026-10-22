@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import Cover from "./Cover";
 import Sheet from "./Sheet";
 import { fmt } from "../api";
@@ -7,7 +8,18 @@ import { usePlayer } from "../state";
 // long shuffled queue can be scanned without stepping through it one at a time.
 export default function QueueSheet({ onClose, fullScreen = false }) {
   const { queue, index, jumpTo } = usePlayer();
+  const currentRef = useRef(null);
   const remaining = Math.max(0, queue.length - index - 1);
+
+  useEffect(() => {
+    if (currentRef.current) {
+      const id = requestAnimationFrame(() => {
+        currentRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, []);
+
   return (
     <Sheet title="Queue" onClose={onClose} fullScreen={fullScreen}>
       <p className="-mt-1 mb-2 text-small text-mute" role="status">
@@ -17,7 +29,7 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
         {queue.map((t, i) => {
           const current = i === index;
           return (
-            <li key={`${t.id}-${i}`}>
+            <li key={`${t.id}-${i}`} ref={current ? currentRef : null}>
               <button onClick={() => { jumpTo(i); onClose(); }} aria-current={current ? "true" : undefined}
                 aria-label={`Play ${t.title} by ${t.artist}`}
                 className={`interactive flex min-h-[56px] w-full items-center gap-3 rounded-tile px-2 py-1 text-left ${current ? "bg-accent-soft" : ""}`}>

@@ -4,7 +4,7 @@ import { ArrowsClockwise, PencilSimple } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
 import Field from "./Field";
-import { Button } from "./Button";
+import { Button, IconButton } from "./Button";
 import { Skeleton, ErrorBox } from "./States";
 import { api, fmt, fmtBitrate, fmtChannels, fmtDate, fmtHz, fmtSize } from "../api";
 import { useAuth, useData, useFetch, usePlayer } from "../state";
@@ -30,11 +30,13 @@ function Row({ label, children }) {
 
 // The full metadata grid, given a detail object from GET /api/tracks/{id} or /api/library/file/{token}.
 // Missing values show a dash instead of an empty or hidden row.
-export function TrackDetails({ track: initialTrack, onUpdated }) {
+export function TrackDetails({ track: initialTrack, onUpdated, editing: controlledEditing, onEditingChange }) {
   const [track, setTrack] = useState(initialTrack);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [internalEditing, setInternalEditing] = useState(false);
+  const editing = controlledEditing !== undefined ? controlledEditing : internalEditing;
+  const setEditing = onEditingChange || setInternalEditing;
   const [err, setErr] = useState("");
   const [form, setForm] = useState({
     title: initialTrack?.title || "",
@@ -149,21 +151,7 @@ export function TrackDetails({ track: initialTrack, onUpdated }) {
       <div className="mb-5 flex items-start gap-4">
         <Cover track={track} className="h-20 w-20 shrink-0" rounded="rounded-2xl" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="break-words text-heading font-semibold leading-snug">{track.title}</p>
-            {canEdit && !editing && (
-              <Button
-                variant="glass"
-                small
-                onClick={startEditing}
-                className="flex items-center gap-1.5 shrink-0"
-                aria-label={`Edit details for ${track.title}`}
-              >
-                <PencilSimple size={16} weight="bold" />
-                Edit
-              </Button>
-            )}
-          </div>
+          <p className="break-words text-heading font-semibold leading-snug">{track.title}</p>
           <p className="break-words text-small text-mute">{track.artist}</p>
           <p className="mt-1.5 flex flex-wrap gap-1.5">
             {track.source === "folder" ? (
@@ -276,7 +264,7 @@ export function TrackDetails({ track: initialTrack, onUpdated }) {
 }
 
 // Fetches the detail for one track id and renders the grid with loading/error states
-export default function TrackDetailsLoader({ trackId, track: initialTrack }) {
+export default function TrackDetailsLoader({ trackId, track: initialTrack, editing, onEditingChange }) {
   const isFolder = initialTrack?.source === "folder";
   const url = isFolder ? `/api/library/file/${trackId}` : (trackId ? `/api/tracks/${trackId}` : null);
   const ready = initialTrack && (initialTrack.bitrate !== undefined || initialTrack.format !== undefined);
@@ -286,5 +274,12 @@ export default function TrackDetailsLoader({ trackId, track: initialTrack }) {
   if (loading && !track) return <Skeleton rows={4} />;
   if (error && !track) return <ErrorBox message={error || "Track not found"} onRetry={reload} />;
   if (!track) return null;
-  return <TrackDetails track={track} onUpdated={setOverrideTrack} />;
+  return (
+    <TrackDetails
+      track={track}
+      onUpdated={setOverrideTrack}
+      editing={editing}
+      onEditingChange={onEditingChange}
+    />
+  );
 }
