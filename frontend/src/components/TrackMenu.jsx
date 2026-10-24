@@ -7,7 +7,10 @@ import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import { api } from "../api";
 import { useAuth, useData, useFetch, usePlayer } from "../state";
-import { transition } from "../motion";
+import { transition, ease } from "../motion";
+
+const VIEW_ENTER = { duration: 0.14, delay: 0.03, ease: ease.smooth };
+const VIEW_EXIT = { duration: 0.05, ease: ease.smooth };
 
 function Item({ icon: Icon, children, onClick, danger, disabled, label }) {
   return (
@@ -70,6 +73,8 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
   const [err, setErr] = useState("");
   const isFolder = track?.source === "folder";
   const canEdit = isFolder ? Boolean(user?.is_admin) : Boolean(track?.owned);
+  const detailsUrl = isFolder ? `/api/library/file/${track?.id}` : (track?.id ? `/api/tracks/${track.id}` : null);
+  useFetch(detailsUrl);
   const run = async (fn) => {
     setBusy(true); setErr("");
     try { await fn(); bump(); onClose(); } catch (e) { setErr(e.message); setBusy(false); }
@@ -93,49 +98,80 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
 
   const titleText = view === "details" ? (editingDetails ? "Edit details" : "Track details") : view === "playlists" ? "Add to playlist" : view === "confirm" ? "Delete track" : track.title;
   const header = (
-    <div className="mb-3 flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 min-w-0">
-        {view !== "actions" && (
-          <IconButton
-            label="Back"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (editingDetails) setEditingDetails(false);
-              else setView("actions");
-            }}
-            className="-ml-1 text-mute hover:text-ink"
+    <div className="mb-3 flex min-h-9 items-center justify-between gap-2 [@media(pointer:coarse)]:min-h-11">
+      <div className="relative flex min-w-0 items-center gap-2">
+        <AnimatePresence initial={false}>
+          {view !== "actions" && (
+            <motion.div
+              key="back-btn"
+              initial={{ opacity: 0, x: reduce ? 0 : -8, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: reduce ? 0 : -8, scale: 0.9 }}
+              transition={transition.fast}
+            >
+              <IconButton
+                label="Back"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (editingDetails) setEditingDetails(false);
+                  else setView("actions");
+                }}
+                className="-ml-1 text-mute hover:text-ink"
+              >
+                <CaretLeft size={20} weight="bold" />
+              </IconButton>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.h2
+            key={titleText}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.05 } }}
+            transition={{ duration: 0.08, delay: 0.03, ease: ease.smooth }}
+            className="truncate text-heading font-semibold"
           >
-            <CaretLeft size={20} weight="bold" />
-          </IconButton>
-        )}
-        <h2 className="truncate text-heading font-semibold">{titleText}</h2>
+            {titleText}
+          </motion.h2>
+        </AnimatePresence>
       </div>
-      {view === "details" && canEdit && !editingDetails && (
-        <IconButton
-          variant="glass"
-          size="sm"
-          onClick={() => setEditingDetails(true)}
-          className="shrink-0 text-mute hover:text-ink"
-          label={`Edit details for ${track.title}`}
-        >
-          <PencilSimple size={18} weight="bold" />
-        </IconButton>
-      )}
+      <AnimatePresence initial={false}>
+        {view === "details" && canEdit && !editingDetails && (
+          <motion.div
+            key="edit-btn"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={transition.fast}
+          >
+            <IconButton
+              variant="glass"
+              size="sm"
+              onClick={() => setEditingDetails(true)}
+              className="shrink-0 text-mute hover:text-ink"
+              label={`Edit details for ${track.title}`}
+            >
+              <PencilSimple size={18} weight="bold" />
+            </IconButton>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 
   return (
     <Sheet title={titleText} header={header} onClose={onClose} fullScreen={fullScreen}>
       {err && <p role="alert" className="mb-2 text-small text-danger">{err}</p>}
-      <AnimatePresence mode="wait" initial={false}>
+      <AnimatePresence mode="popLayout" initial={false}>
         {view === "playlists" && (
-          <motion.div key="playlists" initial={{ opacity: 0, x: reduce ? 0 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -10 }} transition={transition.fast}>
+          <motion.div key="playlists" initial={{ opacity: 0, x: reduce ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -8, transition: VIEW_EXIT }} transition={VIEW_ENTER}>
             <PlaylistPicker track={track} onDone={onClose} />
           </motion.div>
         )}
         {view === "details" && (
-          <motion.div key="details" initial={{ opacity: 0, x: reduce ? 0 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -10 }} transition={transition.fast}>
+          <motion.div key="details" initial={{ opacity: 0, x: reduce ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -8, transition: VIEW_EXIT }} transition={VIEW_ENTER}>
             <TrackDetailsLoader
               trackId={track.id}
               track={track}
@@ -146,7 +182,7 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
           </motion.div>
         )}
         {view === "confirm" && (
-          <motion.div key="confirm" initial={{ opacity: 0, x: reduce ? 0 : 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -10 }} transition={transition.fast}>
+          <motion.div key="confirm" initial={{ opacity: 0, x: reduce ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -8, transition: VIEW_EXIT }} transition={VIEW_ENTER}>
             <p className="text-body text-mute">
               {track.is_shared ? "This removes the track for everyone and takes it out of their playlists. " : "This removes the track and its file from the server. "}It can't be undone.
             </p>
@@ -157,7 +193,7 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
           </motion.div>
         )}
         {view === "actions" && (
-          <motion.div key="actions" initial={{ opacity: 0, x: reduce ? 0 : -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : 10 }} transition={transition.fast}>
+          <motion.div key="actions" initial={{ opacity: 0, x: reduce ? 0 : -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : 8, transition: VIEW_EXIT }} transition={VIEW_ENTER}>
             <Item icon={Info} onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
             {!isFolder && (
               <>

@@ -336,10 +336,9 @@ export default function TrackDetailsLoader({ trackId, track: initialTrack, editi
   const ready = initialTrack && (initialTrack.bitrate !== undefined || initialTrack.format !== undefined);
   const { data, loading, error, reload } = useFetch(!ready ? url : null);
   const [overrideTrack, setOverrideTrack] = useState(null);
-  const track = overrideTrack || (ready ? initialTrack : data);
-  if (loading && !track) return <Skeleton rows={4} />;
+  const track = overrideTrack || (ready ? initialTrack : (data ? { ...initialTrack, ...data } : initialTrack));
   if (error && !track) return <ErrorBox message={error || "Track not found"} onRetry={reload} />;
-  if (!track) return null;
+  if (!track) return <Skeleton rows={4} />;
   return (
     <TrackDetails
       track={track}
