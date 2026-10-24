@@ -570,6 +570,38 @@ def track_cover(track_id: int, user: User = Depends(current_user), db: DbSession
         headers={"Cache-Control": "private, no-cache"},
     )
 
+@router.delete("/{track_id}/cover")
+def delete_track_cover(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Removes cover art from a library track. Admin only."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    track = get_visible_track(db, user, track_id)
+    if track.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only change your own tracks")
+    # Strip embedded artwork first: if the audio file cannot be rewritten, leave the
+    # track (and its served cover) untouched and report the failure.
+    from .itunes import strip_cover_from_file
+    audio_path = resolve_file(track.file_path)
+    try:
+        stripped = strip_cover_from_file(audio_path)
+    except (OSError, PermissionError) as exc:
+        log.warning("Storage is not writable for stripping cover from %s: %s", track.file_path, exc)
+        raise HTTPException(status_code=400, detail="Cannot modify file: permission denied")
+    except Exception as exc:
+        log.warning("Could not read audio file for stripping cover from %s: %s", track.file_path, exc)
+        raise HTTPException(status_code=422, detail="Could not read this track's audio file")
+    if not stripped:
+        raise HTTPException(status_code=422, detail="Could not remove embedded cover art from this file")
+    if track.cover_path:
+        try:
+            resolve_file(track.cover_path).unlink(missing_ok=True)
+        except (OSError, HTTPException) as exc:
+            log.warning("Could not unlink cover file %s: %s", track.cover_path, exc)
+        track.cover_path = None
+        db.commit()
+        db.refresh(track)
+    owner = db.scalar(select(User.username).where(User.id == track.owner_id)) or "unknown"
+    return track_out(track, user.id, owner, detail=True)
 
 # ---------- share / unshare / delete (owner only) ----------
 

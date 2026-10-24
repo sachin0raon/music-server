@@ -371,6 +371,22 @@ def file_cover(token: str, user: User = Depends(current_user)):
     return Response(content=cover, media_type=IMAGE_TYPES.get(ext or "", "image/jpeg"),
                     headers={"Cache-Control": "private, no-cache"})
 
+@router.delete("/file/{token}/cover")
+def delete_file_cover(token: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Removes embedded cover art from a mounted folder file. Admin only."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    path = _path_for(token)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    from .itunes import strip_cover_from_server_file
+    try:
+        stripped = strip_cover_from_server_file(token)
+    except (OSError, PermissionError):
+        raise HTTPException(status_code=400, detail="Cannot modify file: permission denied")
+    if not stripped:
+        raise HTTPException(status_code=422, detail="Could not remove embedded cover art from this file")
+    return _file_details_dict(token, path, user, db, force_reload=True)
 
 class ImportBody(BaseModel):
     tokens: list[str] = Field(min_length=1, max_length=MAX_SELECT)

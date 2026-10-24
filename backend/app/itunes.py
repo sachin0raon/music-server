@@ -178,7 +178,7 @@ def embed_cover_in_file(path: Path, image_bytes: bytes) -> bool:
             audio.add_picture(pic)
             audio.save()
             return True
-        elif ext in (".m4a", ".aac"):
+        elif ext == ".m4a":
             import mutagen.mp4
             audio = mutagen.mp4.MP4(path)
             img_fmt = mutagen.mp4.MP4Cover.FORMAT_PNG if mime == "image/png" else mutagen.mp4.MP4Cover.FORMAT_JPEG
@@ -187,8 +187,12 @@ def embed_cover_in_file(path: Path, image_bytes: bytes) -> bool:
             return True
         elif ext in (".ogg", ".opus"):
             import mutagen.flac
-            import mutagen.oggvorbis
-            audio = mutagen.oggvorbis.OggVorbis(path)
+            if ext == ".opus":
+                import mutagen.oggopus
+                audio = mutagen.oggopus.OggOpus(path)
+            else:
+                import mutagen.oggvorbis
+                audio = mutagen.oggvorbis.OggVorbis(path)
             pic = mutagen.flac.Picture()
             pic.data = image_bytes
             pic.type = 3
@@ -200,6 +204,72 @@ def embed_cover_in_file(path: Path, image_bytes: bytes) -> bool:
         log.warning("Storage is not writable for embedding cover into %s: %s", path, exc)
     except Exception as exc:
         log.warning("Could not embed cover into %s: %s", path, exc)
+    return False
+
+
+def strip_cover_from_file(path: Path) -> bool:
+    """Best-effort removal of embedded artwork from the audio file container on disk."""
+    if not path.is_file():
+        return False
+    ext = path.suffix.lower()
+    try:
+        if ext == ".mp3":
+            import mutagen.id3
+            try:
+                tags = mutagen.id3.ID3(path)
+                tags.delall("APIC")
+                tags.save(path, v2_version=3)
+                return True
+            except mutagen.id3.ID3NoHeaderError:
+                return True
+        elif ext == ".wav":
+            import mutagen.wave
+            audio = mutagen.wave.WAVE(path)
+            if audio.tags:
+                audio.tags.delall("APIC")
+                audio.save()
+            return True
+        elif ext == ".flac":
+            import mutagen.flac
+            audio = mutagen.flac.FLAC(path)
+            audio.clear_pictures()
+            audio.save()
+            return True
+        elif ext == ".m4a":
+            import mutagen.mp4
+            audio = mutagen.mp4.MP4(path)
+            if "covr" in audio:
+                del audio["covr"]
+                audio.save()
+            return True
+        elif ext == ".ogg":
+            import mutagen.oggvorbis
+            audio = mutagen.oggvorbis.OggVorbis(path)
+            if "metadata_block_picture" in audio:
+                del audio["metadata_block_picture"]
+                audio.save()
+            return True
+        elif ext == ".opus":
+            import mutagen.oggopus
+            audio = mutagen.oggopus.OggOpus(path)
+            if "metadata_block_picture" in audio:
+                del audio["metadata_block_picture"]
+                audio.save()
+            return True
+    except (OSError, PermissionError) as exc:
+        log.warning("Storage is not writable for stripping cover from %s: %s", path, exc)
+        raise
+    except Exception as exc:
+        # Mutagen wraps OS errors (e.g. a read-only file) in MutagenError, whose
+        # first argument is the original exception. Unwrap those so the API can
+        # report 400 instead of a generic 422.
+        cause = exc.__cause__
+        if cause is None and exc.args and isinstance(exc.args[0], BaseException):
+            cause = exc.args[0]
+        if isinstance(cause, OSError):
+            log.warning("Storage is not writable for stripping cover from %s: %s", path, cause)
+            raise cause from exc
+        log.warning("Could not strip cover from %s: %s", path, exc)
     return False
 
 
@@ -262,6 +332,23 @@ def apply_cover_to_server_file(token: str, image_bytes: bytes) -> bool:
         pass
     return success
 
+def strip_cover_from_server_file(token: str) -> bool:
+    """Strips embedded cover directly from server file in MUSIC_DIR and clears _index cache."""
+    from .library import _index, _index_lock, _path_for, _require_source
+
+    path = _path_for(token)
+    if not path or not path.is_file():
+        return False
+
+    success = strip_cover_from_file(path)
+    try:
+        root = _require_source()
+        rel = str(path.relative_to(root.resolve()))
+        with _index_lock:
+            _index.pop(rel, None)
+    except Exception:
+        pass
+    return success
 
 def _worker_loop():
     while True:

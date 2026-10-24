@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowsClockwiseIcon as ArrowsClockwise } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, TrashIcon as Trash } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import Chip from "./Chip";
 import Field from "./Field";
@@ -37,6 +37,7 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
   const editing = controlledEditing !== undefined ? controlledEditing : internalEditing;
   const setEditing = onEditingChange || setInternalEditing;
   const [err, setErr] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [form, setForm] = useState({
     title: initialTrack?.title || "",
     artist: initialTrack?.artist || "",
@@ -51,6 +52,7 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
 
   useEffect(() => {
     setTrack(initialTrack);
+    setConfirmRemove(false);
     setForm({
       title: initialTrack?.title || "",
       artist: initialTrack?.artist || "",
@@ -63,7 +65,10 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
 
   const isFolder = track.source === "folder";
   const canRefetch = isFolder || track.owned;
-
+  const hasCover = Boolean(track.has_cover || track.cover_url || track.cover_path);
+  // Folder files belong to the server, so any admin may clean them up; a library
+  // track is only editable by its owner (the README's admin policy).
+  const canRemoveCover = Boolean(user?.is_admin && hasCover && (isFolder || track.owned));
   const startEditing = () => {
     setForm({
       title: track.title || "",
@@ -138,6 +143,29 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
       bump();
     } catch (e) {
       setErr(e.message || "Could not refetch track details");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const handleRemoveCover = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const endpoint = isFolder
+        ? `/api/library/file/${track.id}/cover`
+        : `/api/tracks/${track.id}/cover`;
+      const updated = await api.del(endpoint);
+      // Trust the server's answer: if stripping failed it returns an error, so a
+      // successful response is the source of truth for has_cover/cover_url.
+      const fullTrack = { ...track, ...updated };
+      if (!fullTrack.has_cover) fullTrack.cover_url = null;
+      setTrack(fullTrack);
+      onUpdated?.(fullTrack);
+      patchTrack(track.id, { has_cover: fullTrack.has_cover, cover_url: fullTrack.cover_url ?? null });
+      bump();
+      setConfirmRemove(false);
+    } catch (e) {
+      setErr(e.message || "Could not remove cover art");
     } finally {
       setBusy(false);
     }
@@ -241,17 +269,57 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
             <Row label="Added">{fmtDate(track.created_at)}</Row>
           </dl>
 
-          {canRefetch && (
-            <div className="mt-5 border-t border-line pt-4">
-              <Button
-                variant="glass"
-                onClick={handleRefetch}
-                disabled={busy}
-                className="flex w-full items-center justify-center gap-2"
-              >
-                <ArrowsClockwise size={18} className={busy ? "animate-spin" : ""} weight="bold" />
-                {busy ? "Refetching details..." : "Refetch track details"}
-              </Button>
+          {(canRefetch || canRemoveCover) && (
+            <div className="mt-5 border-t border-line pt-4 space-y-2">
+              {canRefetch && (
+                <Button
+                  variant="glass"
+                  onClick={handleRefetch}
+                  disabled={busy}
+                  className="flex w-full items-center justify-center gap-2"
+                >
+                  <ArrowsClockwise size={18} className={busy ? "animate-spin" : ""} weight="bold" />
+                  {busy ? "Refetching details..." : "Refetch track details"}
+                </Button>
+              )}
+              {canRemoveCover && (
+                confirmRemove ? (
+                  <div className="flex items-center justify-between gap-2 rounded-xl bg-danger-soft p-2 text-danger">
+                    <span className="text-small font-medium pl-1">Remove cover art?</span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        small
+                        onClick={handleRemoveCover}
+                        disabled={busy}
+                      >
+                        {busy ? "Removing…" : "Confirm"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="glass"
+                        small
+                        onClick={() => setConfirmRemove(false)}
+                        disabled={busy}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setConfirmRemove(true)}
+                    disabled={busy}
+                    className="flex w-full items-center justify-center gap-2 text-danger hover:text-danger hover:bg-danger-soft"
+                  >
+                    <Trash size={18} weight="bold" />
+                    Remove cover art
+                  </Button>
+                )
+              )}
               {err && <p role="alert" className="mt-2 text-center text-small text-danger">{err}</p>}
             </div>
           )}
