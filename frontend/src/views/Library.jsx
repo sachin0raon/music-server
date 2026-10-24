@@ -6,6 +6,7 @@ import FolderList from "../components/FolderList";
 import PageHeader from "../components/PageHeader";
 import Tabs from "../components/Tabs";
 import SortSelect, { SORTS, getSavedSort } from "../components/SortSelect";
+import AlphabetBar from "../components/AlphabetBar";
 import { Button, IconButton } from "../components/Button";
 import { Empty } from "../components/States";
 import { useFetch } from "../state";
@@ -25,7 +26,8 @@ export default function Library() {
   // Persistent sort preference: URL query parameter takes priority if present, otherwise localStorage
   const sortParam = params.get("sort");
   const sort = SORTS.some(([id]) => id === sortParam) ? sortParam : getSavedSort(DEFAULT_SORT);
-
+  const letter = params.get("letter");
+  const isTitleSort = sort === "title_asc" || sort === "title_desc";
   // Subtitle always renders (even with 0 tracks) so the header height never shifts
   const [total, setTotal] = useState(null);
   const count = total ?? 0;
@@ -43,6 +45,19 @@ export default function Library() {
   const update = (key, value, fallback) => {
     const next = new URLSearchParams(params);
     if (value === fallback) next.delete(key); else next.set(key, value);
+    if (key === "sort" && value !== "title_asc" && value !== "title_desc") {
+      next.delete("letter");
+    }
+    if (key === "q" && value.trim()) {
+      next.delete("letter");
+    }
+    setParams(next, { replace: true });
+  };
+
+  const handleLetterSelect = (newLetter) => {
+    const next = new URLSearchParams(params);
+    if (newLetter) next.set("letter", newLetter);
+    else next.delete("letter");
     setParams(next, { replace: true });
   };
 
@@ -72,6 +87,13 @@ export default function Library() {
     : tab === "shared"
     ? "Search shared music..."
     : "Search your music...";
+
+  const showAlphabet = isTitleSort && !urlQ.trim();
+  const lettersUrl = isFolder
+    ? "/api/library/letters"
+    : `/api/tracks/letters?scope=${tab}`;
+  const { data: lettersData } = useFetch(showAlphabet ? lettersUrl : null);
+  const availableLetters = lettersData?.letters ?? [];
 
   return (
     <>
@@ -111,14 +133,23 @@ export default function Library() {
           <SortSelect value={sort} onChange={(v) => update("sort", v, DEFAULT_SORT)} className="shrink-0" />
         </div>
       </div>
+      {showAlphabet && (
+        <div className="mb-4">
+          <AlphabetBar
+            availableLetters={availableLetters}
+            selected={letter}
+            onSelect={handleLetterSelect}
+          />
+        </div>
+      )}
       {isFolder ? (
-        <FolderList key="folder" sort={sort} q={urlQ} onClearSearch={clearSearch} onTotal={setTotal} empty={
+        <FolderList key="folder" sort={sort} q={urlQ} letter={letter} onClearSearch={clearSearch} onTotal={setTotal} empty={
           <Empty title="Nothing in the server folder" icon={FolderOpen}>
             The folder the server watches has no playable files. Whoever runs the server can add music to <code>MUSIC_DIR</code> and mount it.
           </Empty>
         } />
       ) : (
-        <TrackList key={tab} scope={tab} q={urlQ} featured={tab === "mine" && !urlQ} sort={sort} onTotal={setTotal}
+        <TrackList key={tab} scope={tab} q={urlQ} letter={letter} featured={tab === "mine" && !urlQ && !letter} sort={sort} onTotal={setTotal}
           empty={
             urlQ ? (
               <Empty title="No matching tracks" icon={MagnifyingGlass} action={<Button variant="accent" small onClick={clearSearch}>Clear search</Button>}>

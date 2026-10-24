@@ -113,22 +113,23 @@ export function useFetch(url) {
   return { ...s, reload };
 }
 
-export function useTracks(scope, q = "", sort = "added_desc") {
+export function useTracks(scope, q = "", sort = "added_desc", letter = null) {
   const { version } = useData();
   const [s, setS] = useState({ items: [], total: 0, loading: true, error: null, busy: false });
   const [tick, setTick] = useState(0);
   const gen = useRef(0); // bumped on every reset, so a late 'Show more' response can be dropped
   const countRef = useRef(50);
   countRef.current = Math.max(50, s.items.length);
-  const prevFilter = useRef(scope + q + sort);
-  if (prevFilter.current !== scope + q + sort) {
-    prevFilter.current = scope + q + sort;
+  const prevFilter = useRef(scope + q + sort + (letter || ""));
+  if (prevFilter.current !== scope + q + sort + (letter || "")) {
+    prevFilter.current = scope + q + sort + (letter || "");
     countRef.current = 50;
   }
 
   const params = (offset, limit = 50) => {
     const p = new URLSearchParams({ scope, sort, limit: String(limit), offset: String(offset) });
     if (q) p.set("q", q);
+    if (letter) p.set("letter", letter);
     return `/api/tracks?${p}`;
   };
   useEffect(() => {
@@ -140,7 +141,7 @@ export function useTracks(scope, q = "", sort = "added_desc") {
       .then((d) => live && setS({ items: d.items, total: d.total, loading: false, error: null, busy: false }))
       .catch((e) => live && setS((p) => ({ ...p, loading: false, error: e.message })));
     return () => { live = false; };
-  }, [scope, q, sort, version, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scope, q, sort, letter, version, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadMore = async () => {
     const g = gen.current;
     setS((p) => ({ ...p, busy: true }));

@@ -226,10 +226,26 @@ def _clean(rows: list[dict]) -> list[dict]:
 
 # ---------- routes ----------
 
+@router.get("/letters")
+def folder_letters(user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """Returns the set of available initial letters ('#', 'A'-'Z') for server folder music."""
+    rows = _rows(user.id, db)
+    letters = set()
+    for r in rows:
+        title = (r["title"] or "").lstrip()
+        if not title:
+            continue
+        first_char = title[0].upper()
+        letters.add(first_char if "A" <= first_char <= "Z" else "#")
+
+    return {"letters": sorted(letters, key=lambda c: (c != "#", c))}
+
+
 @router.get("/files")
 def folder_files(
     sort: str = Query("title_asc", pattern="^(title_asc|title_desc|added_asc|added_desc)$"),
     q: str | None = Query(None, max_length=100),
+    letter: str | None = Query(None, max_length=5),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(current_user),
@@ -243,6 +259,14 @@ def folder_files(
                 if needle in r["title"].lower()
                 or needle in (r["artist"] or "").lower()
                 or needle in (r["album"] or "").lower()]
+    if letter and letter.strip():
+        ch = letter.strip()
+        if ch == "#":
+            rows = [r for r in rows if r["title"] and not r["title"].lstrip()[:1].isalpha()]
+        elif len(ch) == 1 and ch.isalpha():
+            prefix = ch.upper()
+            rows = [r for r in rows if r["title"] and r["title"].lstrip()[:1].upper() == prefix]
+
     return {"total": len(rows), "items": _clean(rows[offset:offset + limit])}
 
 

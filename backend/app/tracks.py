@@ -501,11 +501,38 @@ SORT_ORDER = {
     "title_desc": (Track.title.desc(), Track.id.desc()),
 }
 
+@router.get("/letters")
+def track_letters(
+    scope: str = Query("mine", pattern="^(mine|shared|all)$"),
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+):
+    """Returns the set of available initial letters ('#', 'A'-'Z') for visible tracks."""
+    where = [visible_filter(user)]
+    if scope == "mine":
+        where.append(Track.owner_id == user.id)
+    elif scope == "shared":
+        where.append(Track.is_shared.is_(True))
+
+    raw_initials = db.scalars(
+        select(func.upper(func.substr(func.ltrim(Track.title), 1, 1)))
+        .where(*where)
+        .distinct()
+    ).all()
+
+    letters = set()
+    for ch in raw_initials:
+        if ch:
+            letters.add(ch if "A" <= ch <= "Z" else "#")
+
+    return {"letters": sorted(letters, key=lambda c: (c != "#", c))}
+
 
 @router.get("")
 def list_tracks(
     scope: str = Query("mine", pattern="^(mine|shared|all)$"),
     q: str | None = Query(None, max_length=100),
+    letter: str | None = Query(None, max_length=5),
     sort: str = Query("added_desc", pattern="^(added_desc|added_asc|title_asc|title_desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -525,6 +552,12 @@ def list_tracks(
         where.append(
             Track.title.ilike(like, escape="\\") | Track.artist.ilike(like, escape="\\") | Track.album.ilike(like, escape="\\")
         )
+    if letter and letter.strip():
+        ch = letter.strip()
+        if ch == "#":
+            where.append(Track.title.op("NOT REGEXP")("^[[:space:]]*[a-zA-Z]"))
+        elif len(ch) == 1 and ch.isalpha():
+            where.append(Track.title.ilike(f"{ch.upper()}%"))
 
     total = db.scalar(select(func.count()).select_from(Track).where(*where))
     rows = db.execute(
@@ -535,7 +568,6 @@ def list_tracks(
         .limit(limit).offset(offset)
     ).all()
     return {"total": total, "items": [track_out(t, user.id, owner) for t, owner in rows]}
-
 
 @router.get("/{track_id}")
 def get_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):

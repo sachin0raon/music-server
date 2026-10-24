@@ -11,8 +11,8 @@ import { useFetch, usePlayer, useTracks } from "../state";
 import { transition } from "../motion";
 
 // Used by Library (scope mine/shared) and Search (scope all + q)
-export default function TrackList({ scope, q, empty, featured, onTotal, sort = "added_desc" }) {
-  const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q, sort);
+export default function TrackList({ scope, q, letter, empty, featured, onTotal, sort = "added_desc" }) {
+  const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q, sort, letter);
   const { data: newest } = useFetch(featured ? `/api/tracks?scope=${scope}&sort=added_desc&limit=1` : null);
   const { playTrack, track: current, playing } = usePlayer();
   const [menu, setMenu] = useState(null);
@@ -28,7 +28,7 @@ export default function TrackList({ scope, q, empty, featured, onTotal, sort = "
 
   if (loading) return <Skeleton featured={featured} />;
   if (error && !items.length) return <ErrorBox message={error} onRetry={reload} />;
-  if (!items.length) return empty ?? <Empty title="Nothing here yet" />;
+  if (!items.length) return empty ?? <Empty title={letter ? `No tracks starting with "${letter}"` : "Nothing here yet"} />;
 
   // Play from the card: inside the sorted list when it is there, otherwise just that track
   const playLatest = () => (items.some((t) => t.id === latest.id) ? playTrack(latest, items) : playTrack(latest, [latest]));

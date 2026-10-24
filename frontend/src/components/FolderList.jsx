@@ -16,7 +16,7 @@ const SOURCE = { type: "folder" };
 
 // The Server music tab: browse MUSIC_DIR and preview it in place. Nothing is copied
 // until the user imports, and the folder itself is never changed.
-export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty }) {
+export default function FolderList({ sort, q = "", letter = null, onClearSearch, onTotal, empty }) {
   const { bump, version } = useData();
   const { extendQueue, patchTrack, playTrack, track: current, playing } = usePlayer();
   const [items, setItems] = useState([]);
@@ -31,15 +31,16 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
   const gen = useRef(0); // bumped on every refresh, so a late "Show more" response is dropped
   const countRef = useRef(PAGE);
   countRef.current = Math.max(PAGE, items.length);
-  const prevFilter = useRef(sort + q);
-  if (prevFilter.current !== sort + q) {
-    prevFilter.current = sort + q;
+  const prevFilter = useRef(sort + q + (letter || ""));
+  if (prevFilter.current !== sort + q + (letter || "")) {
+    prevFilter.current = sort + q + (letter || "");
     countRef.current = PAGE;
   }
 
   const page = (offset, limit = PAGE) => {
     const params = { sort, limit: String(limit), offset: String(offset) };
     if (q) params.q = q;
+    if (letter) params.letter = letter;
     return `/api/library/files?${new URLSearchParams(params)}`;
   };
 
@@ -51,7 +52,7 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
     api.get(page(0, limit))
       .then((d) => { if (g === gen.current) { setItems(d.items); setTotal(d.total); setLoading(false); } })
       .catch((e) => { if (g === gen.current) { setErr(e.message); setLoading(false); } });
-  }, [sort, q, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sort, q, letter, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!loading) onTotal?.(total); }, [loading, onTotal, total]);
@@ -118,6 +119,14 @@ export default function FolderList({ sort, q = "", onClearSearch, onTotal, empty
         >
           Nothing in the server folder matches “{q}”.
         </Empty>
+      );
+    }
+    if (letter) {
+      return (
+        <Empty
+          title={`No tracks starting with "${letter}"`}
+          icon={FolderOpen}
+        />
       );
     }
     return empty ?? (
