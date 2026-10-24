@@ -169,6 +169,31 @@ const readStore = (key, fallback) => {
   try { const raw = localStorage.getItem(key); return raw === null ? fallback : JSON.parse(raw); }
   catch { return fallback; }
 };
+// Cosine S-curve volume ramp (smooth derivative at both endpoints to eliminate DC clicks & pops)
+function rampVolume(audio, fromVol, toVol, durationMs) {
+  return new Promise((resolve) => {
+    if (!audio || durationMs <= 0 || fromVol === toVol) {
+      if (audio) audio.volume = toVol;
+      resolve();
+      return;
+    }
+    const startTime = performance.now();
+    const tick = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      const factor = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+      const currentVol = fromVol + (toVol - fromVol) * factor;
+      audio.volume = Math.max(0, Math.min(1, currentVol));
+      if (progress < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        audio.volume = toVol;
+        resolve();
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+}
 
 export function PlayerProvider({ children }) {
   const { user } = useAuth();
@@ -256,36 +281,42 @@ export function PlayerProvider({ children }) {
     const targetSrc = track.stream_url ?? `/api/tracks/${track.id}/stream`;
     const targetVol = muted ? 0 : volume;
 
-    const startNewTrack = () => {
+    let cancelled = false;
+
+    const switchTrack = async () => {
+      // 1. If actively playing, perform a 35ms cosine S-curve fade-out to zero
+      if (!a.paused && a.currentTime > 0 && a.volume > 0) {
+        await rampVolume(a, a.volume, 0, 35);
+        if (cancelled) return;
+        a.pause();
+      }
+
+      if (cancelled) return;
+
+      // 2. Set new source while volume is exactly zero (no initial transient pop)
+      a.volume = 0;
       a.src = targetSrc;
-      a.volume = targetVol;
       setTime(0);
       setDuration(track.duration || 0);
-      a.play().catch(() => setPlaying(false));
+
+      // 3. Begin playback at volume zero and ramp in to target volume
+      try {
+        await a.play();
+        if (cancelled) return;
+        if (targetVol > 0) {
+          await rampVolume(a, 0, targetVol, 35);
+        } else {
+          a.volume = 0;
+        }
+      } catch {
+        if (!cancelled) setPlaying(false);
+      }
     };
 
-    // If audio is actively playing, perform a 15ms micro-fade to zero and pause
-    // to eliminate the DC voltage pop and prevent sound driver buffer underrun
-    let interval = null;
-    if (!a.paused && a.currentTime > 0) {
-      let step = 0;
-      const initialVol = a.volume;
-      interval = setInterval(() => {
-        step += 1;
-        a.volume = Math.max(0, initialVol * (1 - step / 3));
-        if (step >= 3) {
-          clearInterval(interval);
-          interval = null;
-          a.pause();
-          startNewTrack();
-        }
-      }, 5);
-    } else {
-      startNewTrack();
-    }
+    switchTrack();
 
     return () => {
-      if (interval) clearInterval(interval);
+      cancelled = true;
     };
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -411,10 +442,36 @@ export function PlayerProvider({ children }) {
     setQueue([...q, ...add]);
   }, []);
 
+  const play = useCallback(async () => {
+    const a = audioRef.current;
+    const targetVol = muted ? 0 : volume;
+    if (a.paused) {
+      a.volume = 0;
+      try {
+        await a.play();
+        if (targetVol > 0) await rampVolume(a, 0, targetVol, 30);
+      } catch {
+        // ignore
+      }
+    }
+  }, [muted, volume]);
+
+  const pause = useCallback(async () => {
+    const a = audioRef.current;
+    if (!a.paused && a.volume > 0) {
+      const v = a.volume;
+      await rampVolume(a, v, 0, 25);
+      a.pause();
+      a.volume = v;
+    } else {
+      a.pause();
+    }
+  }, []);
+
   const toggle = useCallback(() => {
     const a = audioRef.current;
-    if (a.paused) a.play().catch(() => {}); else a.pause();
-  }, []);
+    if (a.paused) play(); else pause();
+  }, [play, pause]);
 
   // Jump straight to a queue entry (the queue sheet). Re-tapping the current row
   // replays it, the same way tapping it in a list does.
@@ -425,8 +482,6 @@ export function PlayerProvider({ children }) {
     if (i === iRef.current) restart(); else setIndex(i);
   }, [restart]);
 
-  const play = useCallback(() => { audioRef.current.play().catch(() => {}); }, []);
-  const pause = useCallback(() => audioRef.current.pause(), []);
   const seek = useCallback((t) => { audioRef.current.currentTime = t; setTime(t); }, []);
   // Volume is stored on the audio element's own 0..1 scale; dragging off zero unmutes.
   const setVolume = useCallback((v) => {
