@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CaretLeftIcon as CaretLeft, CheckIcon as Check, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
 import Sheet from "./Sheet";
@@ -57,7 +57,9 @@ function PlaylistPicker({ track, onDone }) {
   );
 }
 
-export default function TrackMenu({ track, onClose, playlistId, fullScreen = false }) {
+export default function TrackMenu({ track: initialTrack, onClose, playlistId, fullScreen = false }) {
+  const [track, setTrack] = useState(initialTrack);
+  useEffect(() => { setTrack(initialTrack); }, [initialTrack]);
   const { bump } = useData();
   const { patchTrack, dropTrack } = usePlayer();
   const { user } = useAuth();
@@ -139,6 +141,7 @@ export default function TrackMenu({ track, onClose, playlistId, fullScreen = fal
               track={track}
               editing={editingDetails}
               onEditingChange={setEditingDetails}
+              onUpdated={setTrack}
             />
           </motion.div>
         )}

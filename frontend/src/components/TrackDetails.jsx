@@ -262,7 +262,7 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
 }
 
 // Fetches the detail for one track id and renders the grid with loading/error states
-export default function TrackDetailsLoader({ trackId, track: initialTrack, editing, onEditingChange }) {
+export default function TrackDetailsLoader({ trackId, track: initialTrack, editing, onEditingChange, onUpdated }) {
   const isFolder = initialTrack?.source === "folder";
   const url = isFolder ? `/api/library/file/${trackId}` : (trackId ? `/api/tracks/${trackId}` : null);
   const ready = initialTrack && (initialTrack.bitrate !== undefined || initialTrack.format !== undefined);
@@ -275,7 +275,10 @@ export default function TrackDetailsLoader({ trackId, track: initialTrack, editi
   return (
     <TrackDetails
       track={track}
-      onUpdated={setOverrideTrack}
+      onUpdated={(updated) => {
+        setOverrideTrack(updated);
+        onUpdated?.(updated);
+      }}
       editing={editing}
       onEditingChange={onEditingChange}
     />
