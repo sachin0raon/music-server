@@ -157,11 +157,9 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
           {onToggleHideAdded && (
             <Button
               small
-              variant={hideAdded ? "accent" : "glass"}
               onClick={onToggleHideAdded}
               aria-pressed={hideAdded}
-              aria-label={hideAdded ? "Show tracks already in library" : "Hide tracks already in library"}
-              className="flex items-center gap-1.5"
+              className={hideAdded ? "text-accent !border-accent/40 !bg-accent-soft" : ""}
             >
               {hideAdded ? <EyeSlash size={15} weight="bold" /> : <Eye size={15} />}
               {hideAdded ? "Show added" : "Hide added"}
