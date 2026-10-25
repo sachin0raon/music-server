@@ -14,20 +14,52 @@ import { useFetch } from "../state";
 const TABS = [["mine", "My music"], ["shared", "Shared"]];
 const FOLDER_TAB = ["folder", "Server music"];
 const DEFAULT_SORT = "added_desc";
+export const TAB_STORAGE_KEY = "player.library.tab";
+export const LETTER_STORAGE_KEY = "player.library.letter";
+export const HIDE_ADDED_STORAGE_KEY = "player.folder.hide_added";
+
+function getSavedTab(folderOk) {
+  try {
+    const t = localStorage.getItem(TAB_STORAGE_KEY);
+    return t === "shared" || (t === "folder" && folderOk) ? t : "mine";
+  } catch {
+    return "mine";
+  }
+}
+
+function getSavedLetter() {
+  try {
+    const l = localStorage.getItem(LETTER_STORAGE_KEY);
+    return l && (l === "#" || (l.length === 1 && l.toUpperCase() >= "A" && l.toUpperCase() <= "Z")) ? l.toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSavedHideAdded() {
+  try {
+    return localStorage.getItem(HIDE_ADDED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 export default function Library() {
   const [params, setParams] = useSearchParams();
   const { data: source } = useFetch("/api/library/source");
   const folderOk = Boolean(source?.configured && source.exists && source.readable);
   const requested = params.get("tab");
-  const tab = requested === "shared" ? "shared" : requested === "folder" && folderOk ? "folder" : "mine";
+  const tab = requested === "shared" ? "shared" : requested === "folder" && folderOk ? "folder" : requested === "mine" ? "mine" : getSavedTab(folderOk);
   const isFolder = tab === "folder";
 
   // Persistent sort preference: URL query parameter takes priority if present, otherwise localStorage
   const sortParam = params.get("sort");
   const sort = SORTS.some(([id]) => id === sortParam) ? sortParam : getSavedSort(DEFAULT_SORT);
-  const letter = params.get("letter");
   const isTitleSort = sort === "title_asc" || sort === "title_desc";
+  const letterParam = params.get("letter");
+  const letter = isTitleSort ? (letterParam !== null ? (letterParam || null) : getSavedLetter()) : null;
+  const hideAddedParam = params.get("hide_added");
+  const hideAdded = hideAddedParam !== null ? hideAddedParam === "true" : getSavedHideAdded();
   // Subtitle always renders (even with 0 tracks) so the header height never shifts
   const [total, setTotal] = useState(null);
   const count = total ?? 0;
@@ -47,14 +79,20 @@ export default function Library() {
     if (value === fallback) next.delete(key); else next.set(key, value);
     if (key === "sort" && value !== "title_asc" && value !== "title_desc") {
       next.delete("letter");
+      try { localStorage.removeItem(LETTER_STORAGE_KEY); } catch {}
     }
     if (key === "q" && value.trim()) {
       next.delete("letter");
+      try { localStorage.removeItem(LETTER_STORAGE_KEY); } catch {}
     }
     setParams(next, { replace: true });
   };
 
   const handleLetterSelect = (newLetter) => {
+    try {
+      if (newLetter) localStorage.setItem(LETTER_STORAGE_KEY, newLetter);
+      else localStorage.removeItem(LETTER_STORAGE_KEY);
+    } catch {}
     const next = new URLSearchParams(params);
     if (newLetter) next.set("letter", newLetter);
     else next.delete("letter");
@@ -62,8 +100,18 @@ export default function Library() {
   };
 
   const handleTabChange = (id) => {
+    try { localStorage.setItem(TAB_STORAGE_KEY, id); } catch {}
     const next = new URLSearchParams(params);
     if (id === "mine") next.delete("tab"); else next.set("tab", id);
+    setParams(next, { replace: true });
+  };
+
+  const handleToggleHideAdded = () => {
+    const nextVal = !hideAdded;
+    try { localStorage.setItem(HIDE_ADDED_STORAGE_KEY, String(nextVal)); } catch {}
+    const next = new URLSearchParams(params);
+    if (nextVal) next.set("hide_added", "true");
+    else next.delete("hide_added");
     setParams(next, { replace: true });
   };
 
@@ -90,7 +138,7 @@ export default function Library() {
 
   const showAlphabet = isTitleSort && !urlQ.trim();
   const lettersUrl = isFolder
-    ? "/api/library/letters"
+    ? `/api/library/letters${hideAdded ? "?hide_added=true" : ""}`
     : `/api/tracks/letters?scope=${tab}`;
   const { data: lettersData } = useFetch(showAlphabet ? lettersUrl : null);
   const availableLetters = lettersData?.letters ?? [];
@@ -143,7 +191,7 @@ export default function Library() {
         </div>
       )}
       {isFolder ? (
-        <FolderList key="folder" sort={sort} q={urlQ} letter={letter} onClearSearch={clearSearch} onTotal={setTotal} empty={
+        <FolderList key="folder" sort={sort} q={urlQ} letter={letter} hideAdded={hideAdded} onToggleHideAdded={handleToggleHideAdded} onClearSearch={clearSearch} onTotal={setTotal} empty={
           <Empty title="Nothing in the server folder" icon={FolderOpen}>
             The folder the server watches has no playable files. Whoever runs the server can add music to <code>MUSIC_DIR</code> and mount it.
           </Empty>

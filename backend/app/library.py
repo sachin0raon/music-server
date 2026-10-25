@@ -227,9 +227,15 @@ def _clean(rows: list[dict]) -> list[dict]:
 # ---------- routes ----------
 
 @router.get("/letters")
-def folder_letters(user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+def folder_letters(
+    hide_added: bool = Query(False),
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+):
     """Returns the set of available initial letters ('#', 'A'-'Z') for server folder music."""
     rows = _rows(user.id, db)
+    if hide_added:
+        rows = [r for r in rows if not r["in_library"]]
     letters = set()
     for r in rows:
         title = (r["title"] or "").lstrip()
@@ -246,6 +252,7 @@ def folder_files(
     sort: str = Query("title_asc", pattern="^(title_asc|title_desc|added_asc|added_desc)$"),
     q: str | None = Query(None, max_length=100),
     letter: str | None = Query(None, max_length=5),
+    hide_added: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(current_user),
@@ -253,6 +260,8 @@ def folder_files(
 ):
     """One page of the folder, newest state on every call (nothing is cached client-side)."""
     rows = _sorted(_rows(user.id, db), sort)
+    if hide_added:
+        rows = [r for r in rows if not r["in_library"]]
     if q:
         needle = q.strip().lower()
         rows = [r for r in rows

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
@@ -16,7 +16,7 @@ const SOURCE = { type: "folder" };
 
 // The Server music tab: browse MUSIC_DIR and preview it in place. Nothing is copied
 // until the user imports, and the folder itself is never changed.
-export default function FolderList({ sort, q = "", letter = null, onClearSearch, onTotal, empty }) {
+export default function FolderList({ sort, q = "", letter = null, hideAdded = false, onToggleHideAdded, onClearSearch, onTotal, empty }) {
   const { bump, version } = useData();
   const { extendQueue, patchTrack, playTrack, track: current, playing } = usePlayer();
   const [items, setItems] = useState([]);
@@ -31,9 +31,9 @@ export default function FolderList({ sort, q = "", letter = null, onClearSearch,
   const gen = useRef(0); // bumped on every refresh, so a late "Show more" response is dropped
   const countRef = useRef(PAGE);
   countRef.current = Math.max(PAGE, items.length);
-  const prevFilter = useRef(sort + q + (letter || ""));
-  if (prevFilter.current !== sort + q + (letter || "")) {
-    prevFilter.current = sort + q + (letter || "");
+  const prevFilter = useRef(sort + q + (letter || "") + (hideAdded ? ":h" : ""));
+  if (prevFilter.current !== sort + q + (letter || "") + (hideAdded ? ":h" : "")) {
+    prevFilter.current = sort + q + (letter || "") + (hideAdded ? ":h" : "");
     countRef.current = PAGE;
   }
 
@@ -41,6 +41,7 @@ export default function FolderList({ sort, q = "", letter = null, onClearSearch,
     const params = { sort, limit: String(limit), offset: String(offset) };
     if (q) params.q = q;
     if (letter) params.letter = letter;
+    if (hideAdded) params.hide_added = "true";
     return `/api/library/files?${new URLSearchParams(params)}`;
   };
 
@@ -52,7 +53,7 @@ export default function FolderList({ sort, q = "", letter = null, onClearSearch,
     api.get(page(0, limit))
       .then((d) => { if (g === gen.current) { setItems(d.items); setTotal(d.total); setLoading(false); } })
       .catch((e) => { if (g === gen.current) { setErr(e.message); setLoading(false); } });
-  }, [sort, q, letter, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sort, q, letter, hideAdded, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!loading) onTotal?.(total); }, [loading, onTotal, total]);
@@ -129,6 +130,17 @@ export default function FolderList({ sort, q = "", letter = null, onClearSearch,
         />
       );
     }
+    if (hideAdded) {
+      return (
+        <Empty
+          title="All files already in library"
+          icon={FolderOpen}
+          action={onToggleHideAdded ? <Button variant="accent" small onClick={onToggleHideAdded}>Show all files</Button> : undefined}
+        >
+          Every file in the server folder has already been added to your library.
+        </Empty>
+      );
+    }
     return empty ?? (
       <Empty title="Nothing to browse" icon={FolderOpen}>
         The server's music folder has no playable files right now.
@@ -142,6 +154,19 @@ export default function FolderList({ sort, q = "", letter = null, onClearSearch,
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-small text-mute">Playing from the server folder. Nothing is copied until you import.</p>
         <div className="flex items-center justify-end gap-2">
+          {onToggleHideAdded && (
+            <Button
+              small
+              variant={hideAdded ? "accent" : "glass"}
+              onClick={onToggleHideAdded}
+              aria-pressed={hideAdded}
+              aria-label={hideAdded ? "Show tracks already in library" : "Hide tracks already in library"}
+              className="flex items-center gap-1.5"
+            >
+              {hideAdded ? <EyeSlash size={15} weight="bold" /> : <Eye size={15} />}
+              {hideAdded ? "Show added" : "Hide added"}
+            </Button>
+          )}
           {selectable.length > 0 && (
             <Button small onClick={() => (allSelected ? setSelected(new Set()) : setSelected(new Set(selectable.map((t) => t.id))))}>
               {allSelected ? "Clear selection" : "Select all"}
