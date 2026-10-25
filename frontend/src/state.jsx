@@ -173,13 +173,19 @@ const readStore = (key, fallback) => {
 // Cosine S-curve volume ramp (smooth derivative at both endpoints to eliminate DC clicks & pops)
 function rampVolume(audio, fromVol, toVol, durationMs) {
   return new Promise((resolve) => {
-    if (!audio || durationMs <= 0 || fromVol === toVol) {
+    const isBackground = typeof document !== "undefined" && document.hidden;
+    if (!audio || durationMs <= 0 || fromVol === toVol || isBackground) {
       if (audio) audio.volume = toVol;
       resolve();
       return;
     }
     const startTime = performance.now();
     const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) {
+        audio.volume = toVol;
+        resolve();
+        return;
+      }
       const elapsed = performance.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
       const factor = 0.5 - 0.5 * Math.cos(progress * Math.PI);
@@ -202,6 +208,16 @@ export function PlayerProvider({ children }) {
   const { showToast } = useToast();
   const audioRef = useRef(null);
   if (audioRef.current === null) audioRef.current = new Audio();
+
+  // Attach audio element to DOM so mobile browsers do not prune or discard it in background
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a && typeof document !== "undefined" && !document.body.contains(a)) {
+      a.style.display = "none";
+      document.body.appendChild(a);
+      return () => a.remove();
+    }
+  }, []);
   const [queue, setQueue] = useState([]);
   const [index, setIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
@@ -285,8 +301,11 @@ export function PlayerProvider({ children }) {
     let cancelled = false;
 
     const switchTrack = async () => {
-      // 1. If actively playing, perform a 35ms cosine S-curve fade-out to zero
-      if (!a.paused && a.currentTime > 0 && a.volume > 0) {
+      const isBackground = typeof document !== "undefined" && document.hidden;
+
+      // 1. If actively playing in foreground, perform a 35ms cosine S-curve fade-out to zero.
+      // In background/lock-screen, skip fade-out and pause to maintain unbroken OS media session.
+      if (!isBackground && !a.paused && a.currentTime > 0 && a.volume > 0) {
         await rampVolume(a, a.volume, 0, 35);
         if (cancelled) return;
         a.pause();
@@ -294,26 +313,27 @@ export function PlayerProvider({ children }) {
 
       if (cancelled) return;
 
-      // 2. Set new source while volume is exactly zero (no initial transient pop)
-      a.volume = 0;
+      // 2. Set new source
+      if (!isBackground) {
+        a.volume = 0;
+      }
       a.src = targetSrc;
       setTime(0);
       setDuration(track.duration || 0);
 
-      // 3. Begin playback at volume zero and ramp in to target volume
+      // 3. Begin playback
       try {
         await a.play();
         if (cancelled) return;
-        if (targetVol > 0) {
+        if (!isBackground && targetVol > 0) {
           await rampVolume(a, 0, targetVol, 35);
         } else {
-          a.volume = 0;
+          a.volume = targetVol;
         }
       } catch {
         if (!cancelled) setPlaying(false);
       }
     };
-
     switchTrack();
 
     return () => {
@@ -445,21 +465,30 @@ export function PlayerProvider({ children }) {
 
   const play = useCallback(async () => {
     const a = audioRef.current;
+    if (!a) return;
     const targetVol = muted ? 0 : volume;
+    const isBackground = typeof document !== "undefined" && document.hidden;
     if (a.paused) {
-      a.volume = 0;
-      try {
-        await a.play();
-        if (targetVol > 0) await rampVolume(a, 0, targetVol, 30);
-      } catch {
-        // ignore
+      if (isBackground) {
+        a.volume = targetVol;
+        try { await a.play(); } catch {}
+      } else {
+        a.volume = 0;
+        try {
+          await a.play();
+          if (targetVol > 0) await rampVolume(a, 0, targetVol, 30);
+        } catch {
+          // ignore
+        }
       }
     }
   }, [muted, volume]);
 
   const pause = useCallback(async () => {
     const a = audioRef.current;
-    if (!a.paused && a.volume > 0) {
+    if (!a) return;
+    const isBackground = typeof document !== "undefined" && document.hidden;
+    if (!a.paused && a.volume > 0 && !isBackground) {
       const v = a.volume;
       await rampVolume(a, v, 0, 25);
       a.pause();

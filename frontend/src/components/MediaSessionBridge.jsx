@@ -7,9 +7,10 @@ export default function MediaSessionBridge() {
   const { track, playing, play, pause, next, prev, seek, canNext } = usePlayer();
   const { time, duration } = useTime();
   const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
-  const hasNext = canNext; // repeat all/one keeps the lock-screen Next alive so it can wrap
   const timeRef = useRef(0);
   const durRef = useRef(0);
+  const handlersRef = useRef({});
+  handlersRef.current = { play, pause, next, prev, seek, canNext };
   timeRef.current = time;
   durRef.current = duration;
 
@@ -34,16 +35,18 @@ export default function MediaSessionBridge() {
     if (!ms) return;
     const set = (action, handler) => { try { ms.setActionHandler(action, handler); } catch { /* not supported here */ } };
     const clamp = (t) => Math.max(0, Math.min(t, durRef.current || t));
-    set("play", play);
-    set("pause", pause);
-    set("stop", pause);
-    set("previoustrack", prev);
-    set("nexttrack", hasNext ? () => next(false) : null);
-    set("seekto", (d) => seek(clamp(d.seekTime)));
-    set("seekbackward", (d) => seek(clamp(timeRef.current - (d.seekOffset || 10))));
-    set("seekforward", (d) => seek(clamp(timeRef.current + (d.seekOffset || 10))));
+    set("play", () => handlersRef.current.play?.());
+    set("pause", () => handlersRef.current.pause?.());
+    set("stop", () => handlersRef.current.pause?.());
+    set("previoustrack", () => handlersRef.current.prev?.());
+    set("nexttrack", () => {
+      if (handlersRef.current.canNext) handlersRef.current.next?.(false);
+    });
+    set("seekto", (d) => handlersRef.current.seek?.(clamp(d.seekTime)));
+    set("seekbackward", (d) => handlersRef.current.seek?.(clamp(timeRef.current - (d.seekOffset || 10))));
+    set("seekforward", (d) => handlersRef.current.seek?.(clamp(timeRef.current + (d.seekOffset || 10))));
     return () => ["play", "pause", "stop", "previoustrack", "nexttrack", "seekto", "seekbackward", "seekforward"].forEach((a) => set(a, null));
-  }, [ms, hasNext, play, pause, next, prev, seek]);
+  }, [ms]);
 
   useEffect(() => { if (ms) ms.playbackState = track ? (playing ? "playing" : "paused") : "none"; }, [ms, track, playing]);
 
