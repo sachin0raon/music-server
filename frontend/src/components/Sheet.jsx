@@ -86,7 +86,10 @@ export default function Sheet({ title, header, onClose, fullScreen = false, chil
     <motion.div ref={root} className={`fixed inset-0 z-50 flex items-end justify-center ${fullScreen ? "" : "lg:pl-60"}`} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Dialog"}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={transition.base}>
-      <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60 sm:backdrop-blur-[2px]" />
+      {/* Kept unblurred on purpose: a full-viewport backdrop-filter re-runs on
+          every frame the sheet resizes, which drops the menu <-> details
+          height animation to ~47fps. The sheet's own glass is enough. */}
+      <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/60" />
       <motion.div ref={sheet} className={`glass-overlay relative max-h-[85dvh] w-full max-w-xl ${scrollable ? "overflow-y-auto" : "overflow-hidden"} rounded-t-[28px] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3`}
         style={animating && !reduce ? { backdropFilter: "none", WebkitBackdropFilter: "none" } : undefined}
         initial={{ y: reduce ? 0 : "100%" }} animate={{ y: 0, height: height ?? "auto" }} exit={{ y: reduce ? 0 : "100%" }}
