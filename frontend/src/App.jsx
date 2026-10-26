@@ -3,7 +3,7 @@ import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { PlaylistIcon as Playlist, MagnifyingGlassIcon as MagnifyingGlass, MusicNotesIcon as MusicNotes, UserCircleIcon as UserCircle, WarningCircleIcon as WarningCircle, XIcon as X } from "@phosphor-icons/react";
 import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, usePlayer, useToast } from "./state";
-import { useDominantColor } from "./components/Cover";
+import Ambient from "./components/Ambient";
 import PlayerBar from "./components/PlayerBar";
 import MediaSessionBridge from "./components/MediaSessionBridge";
 import { transition } from "./motion";
@@ -25,19 +25,12 @@ const NAV = [
   { to: "/account", label: "Account", icon: UserCircle },
 ];
 
-function Ambient() {
-  const { track } = usePlayer();
-  const color = useDominantColor(track);
-  const activeTone = track ? color : "var(--color-glow-a)";
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 transition-[background] duration-1000"
-      style={{
-        background: `radial-gradient(ellipse 80% 55% at 0% 0%, color-mix(in srgb, ${activeTone} 50%, transparent) 0%, transparent 75%), radial-gradient(ellipse 65% 50% at 100% 100%, color-mix(in srgb, var(--color-glow-b) 40%, transparent) 0%, transparent 70%), var(--color-ground)`,
-      }}
-    />
-  );
+function PageGlow() {
+  const { track, open } = usePlayer();
+  // The full-screen player sits on an opaque ground and paints its own glow, so
+  // this one would be four full-screen gradient layers of pure overdraw.
+  if (open) return null;
+  return <Ambient track={track} className="fixed inset-0 -z-10" />;
 }
 
 // Scrolls the new page to the top once it actually mounts. With AnimatePresence
@@ -56,7 +49,7 @@ function Shell() {
   return (
     <div className="isolate min-h-[100dvh]">
       <a href="#main" className="glass-raised fixed left-3 top-3 z-[60] -translate-y-20 rounded-full px-4 py-2 text-small font-medium focus:translate-y-0">Skip to content</a>
-      <Ambient />
+      <PageGlow />
       <MediaSessionBridge />
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col gap-1 p-5 lg:flex">
         <div className="mb-6 flex items-center gap-2.5 px-3">
