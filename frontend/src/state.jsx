@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { canGoNext, nextStep, restoreOrder, shuffledQueue } from "./playqueue";
+import { applyNowPlaying, applyPlaybackState, applyPosition } from "./mediasession";
 
 /* ---------- auth ---------- */
 const AuthCtx = createContext(null);
@@ -202,21 +203,40 @@ function rampVolume(audio, fromVol, toVol, durationMs) {
   });
 }
 
+// Where a track's audio lives. Kept module-level so the preloader and the
+// switch effect agree on the exact string they compare against.
+const srcFor = (t) => (t ? (t.stream_url ?? `/api/tracks/${t.id}/stream`) : null);
+
+// How close to the end of a track the next one starts buffering. Long enough to
+// have it warm before the handoff, short enough that skipping costs nothing.
+const PRELOAD_LEAD = 30;
+
 export function PlayerProvider({ children }) {
   const { user } = useAuth();
   const { bump } = useData();
   const { showToast } = useToast();
-  const audioRef = useRef(null);
-  if (audioRef.current === null) audioRef.current = new Audio();
+  // Two elements, not one. The spare holds the upcoming track already buffered,
+  // so a track change is a swap rather than a fresh load. See the `ended`
+  // handler: a backgrounded tab cannot be relied on to render in time to start
+  // the next track, and any silent gap costs the page its background-audio
+  // exemption, which is what stopped playback on a locked phone.
+  const elements = useRef(null);
+  if (elements.current === null) elements.current = [new Audio(), new Audio()];
+  const audioRef = useRef(elements.current[0]);
+  const spareRef = useRef(elements.current[1]);
+  const loadedSrc = useRef(null); // what the active element is currently playing
+  const lastPosSec = useRef(-1); // throttles lock-screen position pushes to once a second
 
-  // Attach audio element to DOM so mobile browsers do not prune or discard it in background
+  // Attach both to the DOM so mobile browsers do not prune or discard them in background
   useEffect(() => {
-    const a = audioRef.current;
-    if (a && typeof document !== "undefined" && !document.body.contains(a)) {
-      a.style.display = "none";
-      document.body.appendChild(a);
-      return () => a.remove();
-    }
+    if (typeof document === "undefined") return undefined;
+    const els = elements.current;
+    els.forEach((el) => {
+      el.style.display = "none";
+      el.preload = "auto";
+      if (!document.body.contains(el)) document.body.appendChild(el);
+    });
+    return () => els.forEach((el) => el.remove());
   }, []);
   const [queue, setQueue] = useState([]);
   const [index, setIndex] = useState(-1);
@@ -239,6 +259,10 @@ export function PlayerProvider({ children }) {
   const repeatRef = useRef(repeat); // read inside `next`, which must keep a stable identity
   const origOrder = useRef(null); // track ids in the pre-shuffle order; null while shuffle is off
   const queueSource = useRef(null); // the list that started this queue, so it can follow its reorders
+  const volRef = useRef(volume);
+  const muteRef = useRef(muted);
+  volRef.current = volume;
+  muteRef.current = muted;
   qRef.current = queue;
   iRef.current = index;
   shuffleRef.current = shuffle;
@@ -266,16 +290,63 @@ export function PlayerProvider({ children }) {
     else setIndex(ix - 1);
   }, []);
 
-  useEffect(() => {
+  // Hands the already-buffered spare straight to the speakers and makes it the
+  // active element. Runs inside the native `ended` event, so it does not wait on
+  // a React render -- a backgrounded tab throttles those, and the resulting gap
+  // is what used to end playback at a track boundary on a locked phone.
+  const handoff = useCallback((step) => {
+    const spare = spareRef.current;
+    const upcoming = qRef.current[step];
+    const want = srcFor(upcoming);
+    if (!want || !spare || spare.getAttribute("src") !== want) return false;
     const a = audioRef.current;
+    spare.volume = muteRef.current ? 0 : volRef.current;
+    try { if (spare.currentTime > 0) spare.currentTime = 0; } catch { /* not seekable yet */ }
+    const started = spare.play();
+    if (started) started.catch(() => {});
+    audioRef.current = spare;
+    spareRef.current = a;
+    loadedSrc.current = want;
+    a.pause();
+    a.removeAttribute("src");
+    // Synchronously, for the same reason the play() above is: waiting on a
+    // render here leaves the OS session pointing at the finished track, and a
+    // stale session is what cost the page its background exemption.
+    applyNowPlaying(upcoming, "playing");
+    applyPosition(upcoming.duration, 0); // new track: clear the finished one's position
+    lastPosSec.current = -1;
+    return true;
+  }, []);
+
+  useEffect(() => {
+    const els = elements.current;
+    const active = (e) => e.currentTarget === audioRef.current;
     const on = {
-      play: () => setPlaying(true),
-      pause: () => setPlaying(false),
-      timeupdate: () => setTime(a.currentTime),
-      loadedmetadata: () => Number.isFinite(a.duration) && setDuration(a.duration),
-      ended: () => next(true),
-      playing: () => { failures.current = 0; },
-      error: () => {
+      play: (e) => { if (active(e)) { applyPlaybackState("playing"); setPlaying(true); } },
+      pause: (e) => { if (active(e)) { applyPlaybackState("paused"); setPlaying(false); } },
+      timeupdate: (e) => {
+        if (!active(e)) return;
+        const el = e.currentTarget;
+        setTime(el.currentTime);
+        // Straight off the media event: a backgrounded tab throttles renders,
+        // which left the lock-screen scrubber frozen where the track started.
+        const sec = Math.floor(el.currentTime);
+        if (sec !== lastPosSec.current) {
+          lastPosSec.current = sec;
+          applyPosition(el.duration, el.currentTime);
+        }
+      },
+      loadedmetadata: (e) => { if (active(e) && Number.isFinite(e.currentTarget.duration)) setDuration(e.currentTarget.duration); },
+      ended: (e) => {
+        if (!active(e)) return;
+        const step = nextStep({ index: iRef.current, length: qRef.current.length, repeat: repeatRef.current, auto: true });
+        if (typeof step === "number" && handoff(step)) { setIndex(step); return; }
+        next(true);
+      },
+      playing: (e) => { if (active(e)) failures.current = 0; },
+      error: (e) => {
+        if (!active(e)) return;
+        const a = audioRef.current;
         // Skip a track that is gone (deleted or unshared). Stop instead on a network drop,
         // after 3 failures in a row (e.g. expired session), or when there is nothing next.
         failures.current += 1;
@@ -287,16 +358,31 @@ export function PlayerProvider({ children }) {
         next(false);
       },
     };
-    Object.entries(on).forEach(([e, f]) => a.addEventListener(e, f));
-    return () => Object.entries(on).forEach(([e, f]) => a.removeEventListener(e, f));
-  }, [next, showToast]);
+    els.forEach((el) => Object.entries(on).forEach(([e, f]) => el.addEventListener(e, f)));
+    return () => els.forEach((el) => Object.entries(on).forEach(([e, f]) => el.removeEventListener(e, f)));
+  }, [next, showToast, handoff]);
 
   useEffect(() => {
     const a = audioRef.current;
-    if (!track) { a.pause(); a.removeAttribute("src"); setTime(0); setDuration(0); return; }
+    if (!track) {
+      a.pause();
+      a.removeAttribute("src");
+      loadedSrc.current = null;
+      setTime(0);
+      setDuration(0);
+      return;
+    }
 
-    const targetSrc = track.stream_url ?? `/api/tracks/${track.id}/stream`;
+    const targetSrc = srcFor(track);
     const targetVol = muted ? 0 : volume;
+
+    // The `ended` handoff already swapped this track in and started it. React is
+    // only now catching up, so there is nothing left to load.
+    if (loadedSrc.current === targetSrc) {
+      setTime(0);
+      setDuration(track.duration || 0);
+      return;
+    }
 
     let cancelled = false;
 
@@ -318,6 +404,7 @@ export function PlayerProvider({ children }) {
         a.volume = 0;
       }
       a.src = targetSrc;
+      loadedSrc.current = targetSrc;
       setTime(0);
       setDuration(track.duration || 0);
 
@@ -340,6 +427,26 @@ export function PlayerProvider({ children }) {
       cancelled = true;
     };
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the spare element loaded with whatever plays next, so `ended` only has
+  // to press play. Repeat-one needs no spare: it replays the active element.
+  // Held back until the current track is nearly over, so skipping through a
+  // queue does not start (and abandon) a download per tap.
+  const nearEnd = duration > 0 && duration - time < PRELOAD_LEAD;
+  useEffect(() => {
+    const spare = spareRef.current;
+    if (!spare || !nearEnd) return;
+    const step = nextStep({ index, length: queue.length, repeat, auto: true });
+    const want = typeof step === "number" ? srcFor(queue[step]) : null;
+    if (!want) {
+      if (spare.getAttribute("src")) spare.removeAttribute("src");
+      return;
+    }
+    if (spare.getAttribute("src") === want) return;
+    spare.volume = 0; // silent until the handoff raises it, in case it ever self-starts
+    spare.src = want;
+    spare.load();
+  }, [index, queue, repeat, nearEnd]);
 
   // When a track plays without cover art, check after a short delay for background-fetched artwork
   useEffect(() => {
