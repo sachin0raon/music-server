@@ -1,12 +1,16 @@
-import { useEffect, useRef } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import { motion, useIsPresent, useReducedMotion } from "motion/react";
 import { CaretLeftIcon as CaretLeft, XIcon as X } from "@phosphor-icons/react";
 import { IconButton } from "./Button";
 import useFocusTrap from "./useFocusTrap";
 import { ease } from "../motion";
 
-const ENTER = { duration: 0.16, ease: ease.smooth };
-const EXIT = { duration: 0.12, ease: ease.smooth };
+const ENTER = { duration: 0.26, ease: ease.smooth };
+const EXIT = { duration: 0.18, ease: ease.smooth };
+// Reduced motion keeps a short cross-fade rather than snapping: a cut between
+// two full-screen states is harder to follow than a brief fade.
+const ENTER_REDUCED = { duration: 0.12 };
+const EXIT_REDUCED = { duration: 0.1 };
 
 // Page scroll lock, shared by every open modal. The counter keeps nested
 // overlays from unlocking the page early, and the padding compensates for the
@@ -42,6 +46,13 @@ function unlockScroll() {
 // the X button or Escape, never the scrim.
 export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, children }) {
   const reduce = useReducedMotion();
+  const present = useIsPresent();
+  // The card carries backdrop-filter: blur(34px). Re-blurring a surface this
+  // large every frame starves the open/close animation, so the blur is paused
+  // while the card is moving and restored once it settles. At 92% opaque the
+  // gap is imperceptible for the length of the motion.
+  const [settled, setSettled] = useState(false);
+  const blurless = !reduce && (!settled || !present);
   const root = useRef(null);
   const body = useRef(null);
   const heading = useRef(null);
@@ -80,15 +91,17 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
     <motion.div ref={root} role="dialog" aria-modal="true" aria-label={label || title || "Dialog"}
       className={`fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8dvh] sm:pt-[10dvh] ${fullScreen ? "" : "lg:pl-60"}`}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: reduce ? { duration: 0 } : EXIT }}
-      transition={reduce ? { duration: 0 } : ENTER}>
+      exit={{ opacity: 0, transition: reduce ? EXIT_REDUCED : EXIT }}
+      transition={reduce ? ENTER_REDUCED : ENTER}>
       <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
       <motion.div
         className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl"
-        initial={{ opacity: 0, scale: reduce ? 1 : 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: reduce ? 1 : 0.97, transition: reduce ? { duration: 0 } : EXIT }}
-        transition={reduce ? { duration: 0 } : ENTER}>
+        style={blurless ? { backdropFilter: "none", WebkitBackdropFilter: "none" } : undefined}
+        onAnimationComplete={() => setSettled(true)}
+        initial={{ opacity: 0, scale: reduce ? 1 : 0.92, y: reduce ? 0 : 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: reduce ? 1 : 0.95, y: reduce ? 0 : 8, transition: reduce ? EXIT_REDUCED : EXIT }}
+        transition={reduce ? ENTER_REDUCED : ENTER}>
         <div className="flex min-h-11 shrink-0 items-center gap-2 px-5 pt-3">
           {onBack && (
             <IconButton label="Back" size="sm" onClick={onBack} className="-ml-2 text-mute hover:text-ink">
