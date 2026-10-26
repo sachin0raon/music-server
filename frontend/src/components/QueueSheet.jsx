@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import Cover from "./Cover";
-import Sheet from "./Sheet";
+import Modal from "./Modal";
 import { fmt } from "../api";
 import { usePlayer } from "../state";
 
@@ -21,7 +21,7 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
   }, []);
 
   return (
-    <Sheet title="Queue" onClose={onClose} fullScreen={fullScreen}>
+    <Modal label="Queue" title="Queue" onClose={onClose} fullScreen={fullScreen}>
       <p className="-mt-1 mb-2 text-small text-mute" role="status">
         {queue.length} {queue.length === 1 ? "track" : "tracks"} · {remaining} after this one
       </p>
@@ -31,6 +31,7 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
           return (
             <li key={`${t.id}-${i}`} ref={current ? currentRef : null}>
               <button onClick={() => { jumpTo(i); onClose(); }} aria-current={current ? "true" : undefined}
+                data-autofocus={current ? "" : undefined}
                 aria-label={`Play ${t.title} by ${t.artist}`}
                 className={`interactive flex min-h-[56px] w-full items-center gap-3 rounded-tile px-2 py-1 text-left ${current ? "bg-accent-soft" : ""}`}>
                 <span className="tnum w-6 shrink-0 text-right text-small text-mute">{i + 1}</span>
@@ -45,6 +46,6 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
           );
         })}
       </ul>
-    </Sheet>
+    </Modal>
   );
 }

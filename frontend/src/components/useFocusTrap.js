@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-// Open traps, innermost last: a sheet on top of Now Playing is the only one that handles Tab
+// Open traps, innermost last: a dialog on top of Now Playing is the only one that handles Tab
 const stack = [];
 
 // Keeps Tab inside `ref` while mounted, moves focus in on open and restores it on close
@@ -21,7 +21,10 @@ export default function useFocusTrap(ref) {
     };
     stack.push(el);
     document.addEventListener("keydown", onKey);
-    if (!el.contains(document.activeElement)) (items()[0] || el).focus({ preventScroll: true });
+    if (!el.contains(document.activeElement)) {
+      const preferred = [...el.querySelectorAll("[data-autofocus]")].find((n) => n.getClientRects().length > 0);
+      (preferred || items()[0] || el).focus({ preventScroll: true });
+    }
     return () => {
       document.removeEventListener("keydown", onKey);
       stack.splice(stack.indexOf(el), 1);

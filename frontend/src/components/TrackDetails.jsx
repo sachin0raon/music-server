@@ -1,13 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowsClockwiseIcon as ArrowsClockwise, TrashIcon as Trash } from "@phosphor-icons/react";
-import Cover from "./Cover";
-import Chip from "./Chip";
 import Field from "./Field";
 import { Button } from "./Button";
 import { Skeleton, ErrorBox } from "./States";
 import { api, fmt, fmtBitrate, fmtChannels, fmtDate, fmtHz, fmtSize } from "../api";
 import { useAuth, useData, useFetch, usePlayer } from "../state";
 const MISSING = <span className="text-mute">—</span>;
+
+// The editable fields, normalized to strings so `form` and the baseline compare cleanly.
+const values = (t) => ({
+  title: t?.title || "",
+  artist: t?.artist || "",
+  album: t?.album || "",
+  composer: t?.composer || "",
+  genre: t?.genre || "",
+  year: t?.year ? String(t.year) : "",
+});
 
 // Track and disc are one row, but either can stand alone: a file can carry a
 // disc number without a track number, and both must still be visible.
@@ -29,7 +37,7 @@ function Row({ label, children }) {
 
 // The full metadata grid, given a detail object from GET /api/tracks/{id} or /api/library/file/{token}.
 // Missing values show a dash instead of an empty or hidden row.
-export function TrackDetails({ track: initialTrack, onUpdated, editing: controlledEditing, onEditingChange }) {
+export function TrackDetails({ track: initialTrack, onUpdated, editing: controlledEditing, onEditingChange, onDirtyChange }) {
   const [track, setTrack] = useState(initialTrack);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,14 +46,7 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
   const setEditing = onEditingChange || setInternalEditing;
   const [err, setErr] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [form, setForm] = useState({
-    title: initialTrack?.title || "",
-    artist: initialTrack?.artist || "",
-    album: initialTrack?.album || "",
-    composer: initialTrack?.composer || "",
-    genre: initialTrack?.genre || "",
-    year: initialTrack?.year ? String(initialTrack.year) : "",
-  });
+  const [form, setForm] = useState(() => values(initialTrack));
   const { user } = useAuth();
   const { bump } = useData();
   const { patchTrack } = usePlayer();
@@ -53,15 +54,26 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
   useEffect(() => {
     setTrack(initialTrack);
     setConfirmRemove(false);
-    setForm({
-      title: initialTrack?.title || "",
-      artist: initialTrack?.artist || "",
-      album: initialTrack?.album || "",
-      composer: initialTrack?.composer || "",
-      genre: initialTrack?.genre || "",
-      year: initialTrack?.year ? String(initialTrack.year) : "",
-    });
   }, [initialTrack]);
+
+  // Entering edit mode starts from the latest saved values. Running only on the
+  // transition keeps typed input intact (including through the discard prompt
+  // and any parent re-render).
+  useLayoutEffect(() => {
+    if (editing) setForm(values(track));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+  // Unsaved-edit tracking, surfaced to the modal's discard prompt. A ref keeps
+  // the callback stable so reporting a change does not re-subscribe anything.
+  // A layout effect reports before paint, so a cancel followed immediately by
+  // Escape cannot use the previous "dirty" value.
+  const baseline = values(track);
+  const dirty = editing && Object.keys(form).some((k) => form[k] !== baseline[k]);
+  const dirtyCb = useRef(onDirtyChange);
+  dirtyCb.current = onDirtyChange;
+  useLayoutEffect(() => { dirtyCb.current?.(dirty); }, [dirty]);
+  useEffect(() => () => dirtyCb.current?.(false), []);
 
   const isFolder = track.source === "folder";
   const canRefetch = isFolder || track.owned;
@@ -69,19 +81,6 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
   // Folder files belong to the server, so any admin may clean them up; a library
   // track is only editable by its owner (the README's admin policy).
   const canRemoveCover = Boolean(user?.is_admin && hasCover && (isFolder || track.owned));
-  const startEditing = () => {
-    setForm({
-      title: track.title || "",
-      artist: track.artist || "",
-      album: track.album || "",
-      composer: track.composer || "",
-      genre: track.genre || "",
-      year: track.year ? String(track.year) : "",
-    });
-    setErr("");
-    setEditing(true);
-  };
-
   const cancelEditing = () => {
     setEditing(false);
     setErr("");
@@ -174,24 +173,6 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
   const num = (n) => (n === null || n === undefined ? null : String(n));
   return (
     <div>
-      <div className="mb-5 flex items-start gap-4">
-        <Cover track={track} className="h-20 w-20 shrink-0" rounded="rounded-2xl" />
-        <div className="min-w-0 flex-1">
-          <p className="break-words text-heading font-semibold leading-snug">{track.title}</p>
-          <p className="break-words text-small text-mute">{track.artist}</p>
-          <p className="mt-1.5 flex flex-wrap gap-1.5">
-            {track.source === "folder" ? (
-              <Chip variant="soft">{track.in_library ? "In your library" : "Server file"}</Chip>
-            ) : track.owned ? (
-              <Chip variant={track.is_shared ? "accent" : "soft"}>{track.is_shared ? "Shared" : "Private"}</Chip>
-            ) : track.owner && (
-              <Chip variant="soft">Shared by {track.owner}</Chip>
-            )}
-            {track.format && <Chip variant="soft">{track.format}</Chip>}
-          </p>
-        </div>
-      </div>
-
       {editing ? (
         <form onSubmit={handleSave} className="space-y-3.5">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -330,13 +311,16 @@ export function TrackDetails({ track: initialTrack, onUpdated, editing: controll
 }
 
 // Fetches the detail for one track id and renders the grid with loading/error states
-export default function TrackDetailsLoader({ trackId, track: initialTrack, editing, onEditingChange, onUpdated }) {
+export default function TrackDetailsLoader({ trackId, track: initialTrack, editing, onEditingChange, onUpdated, onDirtyChange }) {
   const isFolder = initialTrack?.source === "folder";
   const url = isFolder ? `/api/library/file/${trackId}` : (trackId ? `/api/tracks/${trackId}` : null);
   const ready = initialTrack && (initialTrack.bitrate !== undefined || initialTrack.format !== undefined);
-  const { data, loading, error, reload } = useFetch(!ready ? url : null);
+  const { data, error, reload } = useFetch(!ready ? url : null);
   const [overrideTrack, setOverrideTrack] = useState(null);
-  const track = overrideTrack || (ready ? initialTrack : (data ? { ...initialTrack, ...data } : initialTrack));
+  // Stable identity: a fresh merged object on every render would reset the
+  // details form (and its unsaved edits) whenever the modal re-rendered.
+  const fetched = useMemo(() => (data ? { ...initialTrack, ...data } : initialTrack), [initialTrack, data]);
+  const track = overrideTrack || (ready ? initialTrack : fetched);
   if (error && !track) return <ErrorBox message={error || "Track not found"} onRetry={reload} />;
   if (!track) return <Skeleton rows={4} />;
   return (
@@ -348,6 +332,7 @@ export default function TrackDetailsLoader({ trackId, track: initialTrack, editi
       }}
       editing={editing}
       onEditingChange={onEditingChange}
+      onDirtyChange={onDirtyChange}
     />
   );
 }

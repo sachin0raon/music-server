@@ -503,7 +503,7 @@ export function PlayerProvider({ children }) {
     if (a.paused) play(); else pause();
   }, [play, pause]);
 
-  // Jump straight to a queue entry (the queue sheet). Re-tapping the current row
+  // Jump straight to a queue entry (the queue modal). Re-tapping the current row
   // replays it, the same way tapping it in a list does.
   const jumpTo = useCallback((i) => {
     const q = qRef.current;
