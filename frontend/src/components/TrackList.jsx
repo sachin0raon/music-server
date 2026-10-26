@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, PlayIcon as Play } from "@phosphor-icons/react";
-import Cover, { useDominantColor } from "./Cover";
+import Cover from "./Cover";
+import { useCoverPalette } from "../palette";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
 import GlassPanel from "./GlassPanel";
@@ -24,7 +25,7 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
 
   // The card always shows the newest upload, whatever order the list is in
   const latest = featured ? newest?.items?.[0] ?? null : null;
-  const tint = useDominantColor(latest);
+  const tint = useCoverPalette(latest).topLeft;
 
   if (loading) return <Skeleton featured={featured} />;
   if (error && !items.length) return <ErrorBox message={error} onRetry={reload} />;
@@ -39,7 +40,9 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
         <GlassPanel as={motion.section} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
           transition={transition.slow}
           className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6"
-          style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.045))` }}>
+          // The second layer restates .glass-flat, which the first would otherwise
+          // let the page show through. Keep the two in step.
+          style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, #191a1c, #111215)` }}>
           <Cover track={latest} eager className="h-[122px] w-[122px] shadow-lift sm:h-[184px] sm:w-[184px]" rounded="rounded-2xl" />
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center sm:gap-8 sm:py-0">
             <div className="min-w-0">
