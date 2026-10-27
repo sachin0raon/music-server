@@ -94,10 +94,16 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
       <motion.div
         className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl"
         // Opaque from the first frame on the way in: any opacity below 1 shows
-        // whatever is behind the dialog. Only the size and offset animate.
-        initial={{ scale: reduce ? 1 : 0.92, y: reduce ? 0 : 12 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: reduce ? 1 : 0.93, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
+        // whatever is behind the dialog.
+        //
+        // Offset only, never scale. Scaling forces the card's layer to be
+        // re-rasterized, and once the body below has enough rows to scroll it
+        // becomes its own composited layer, at which point the card's own tiles
+        // could arrive a frame late and the whole dialog flashed transparent on
+        // mobile. Translation moves an existing raster and cannot do that.
+        initial={{ y: reduce ? 0 : 16 }}
+        animate={{ y: 0 }}
+        exit={{ opacity: 0, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
         transition={reduce ? ENTER_REDUCED : ENTER}>
         <div className="flex min-h-11 shrink-0 items-center gap-2 px-5 pt-3">
           {onBack && (
@@ -113,7 +119,7 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
             <X size={18} weight="bold" />
           </IconButton>
         </div>
-        <div ref={body} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none">
+        <div ref={body} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-surface-2 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none">
           {children}
         </div>
         {overlay && (
