@@ -1,36 +1,37 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { ambientGradient, useCoverPalette } from "../palette";
 
 // The glow behind everything, tinted from the current cover.
 //
-// Rendered as a stack of layers rather than one element with an animated
-// `background`: CSS gradients are not interpolable, so the `transition` this
-// replaces never actually ran and every track change snapped. The outgoing
-// layer holds full opacity underneath while the incoming one fades in over it,
-// so the page ground is never visible through the pair mid-change.
+// Two layers rather than one element with an animated `background`: CSS
+// gradients are not interpolable, so a `transition` on them never runs and the
+// change snaps.
 //
-// Keyed on the track rather than on the gradient: the palette resolves twice per
-// track (a deterministic fallback first, then the colours read from the cover),
-// and keying on the colours would cross-fade for each. The refinement lands a
-// few frames into the fade, while the layer is still near transparent.
+// The base layer is opaque and always shows the last gradient that finished
+// arriving; the incoming one fades in above it and is promoted to base once it
+// is fully opaque. Nothing is ever removed from underneath a half-faded layer,
+// which is what left the page ground showing through mid-change.
 export default function Ambient({ track, className = "" }) {
   const reduce = useReducedMotion();
   const palette = useCoverPalette(track);
   const background = ambientGradient(palette);
+  const [base, setBase] = useState(background);
 
   return (
     <div aria-hidden="true" className={`pointer-events-none overflow-hidden ${className}`}>
-      <AnimatePresence initial={false}>
+      <div className="absolute inset-0" style={{ background: base }} />
+      {base !== background && (
         <motion.div
-          key={track?.id ?? "idle"}
+          key={background}
           className="absolute inset-0"
           style={{ background }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 1 }}
           transition={{ duration: reduce ? 0 : 1, ease: "linear" }}
+          onAnimationComplete={() => setBase(background)}
         />
-      </AnimatePresence>
+      )}
     </div>
   );
 }
