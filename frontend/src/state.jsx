@@ -261,8 +261,13 @@ export function PlayerProvider({ children }) {
   const queueSource = useRef(null); // the list that started this queue, so it can follow its reorders
   const volRef = useRef(volume);
   const muteRef = useRef(muted);
+  // The element's own duration is Infinity for streams it cannot measure up
+  // front (a VBR MP3 with no Xing header, say), so the OS scrubber is fed the
+  // duration the track carries instead and only falls back to the element.
+  const durRef = useRef(0);
   volRef.current = volume;
   muteRef.current = muted;
+  durRef.current = duration;
   qRef.current = queue;
   iRef.current = index;
   shuffleRef.current = shuffle;
@@ -321,6 +326,7 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     const els = elements.current;
     const active = (e) => e.currentTarget === audioRef.current;
+    const knownDuration = (el) => (durRef.current > 0 ? durRef.current : (Number.isFinite(el.duration) ? el.duration : 0));
     const on = {
       play: (e) => { if (active(e)) { applyPlaybackState("playing"); setPlaying(true); } },
       pause: (e) => { if (active(e)) { applyPlaybackState("paused"); setPlaying(false); } },
@@ -333,8 +339,16 @@ export function PlayerProvider({ children }) {
         const sec = Math.floor(el.currentTime);
         if (sec !== lastPosSec.current) {
           lastPosSec.current = sec;
-          applyPosition(el.duration, el.currentTime);
+          applyPosition(knownDuration(el), el.currentTime);
         }
+      },
+      // A scrub lands anywhere, including inside the second already pushed, so
+      // the once-a-second throttle above would swallow it.
+      seeked: (e) => {
+        if (!active(e)) return;
+        const el = e.currentTarget;
+        lastPosSec.current = Math.floor(el.currentTime);
+        applyPosition(knownDuration(el), el.currentTime);
       },
       loadedmetadata: (e) => { if (active(e) && Number.isFinite(e.currentTarget.duration)) setDuration(e.currentTarget.duration); },
       ended: (e) => {
