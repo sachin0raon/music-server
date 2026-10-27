@@ -158,7 +158,6 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
   const editAction = view === "details" && canEdit && detailsReady && !editingDetails ? (
     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={transition.fast}>
       <IconButton
-        variant="glass"
         size="sm"
         onClick={() => setEditingDetails(true)}
         className="shrink-0 text-mute hover:text-ink"
