@@ -83,14 +83,20 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
   return (
     <motion.div ref={root} role="dialog" aria-modal="true" aria-label={label || title || "Dialog"}
       className={`fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8dvh] sm:pt-[10dvh] ${fullScreen ? "" : "lg:pl-60"}`}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: reduce ? EXIT_REDUCED : EXIT }}
-      transition={reduce ? ENTER_REDUCED : ENTER}>
-      <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
+      exit={{ opacity: 0, transition: reduce ? EXIT_REDUCED : EXIT }}>
+      {/* The scrim fades on its own rather than on the root. Fading the root
+          multiplied with the card's own opacity, leaving the card around a
+          quarter opaque mid-open while the scrim had not darkened yet, so the
+          page read straight through the dialog body. */}
+      <motion.div aria-hidden="true" className="absolute inset-0 bg-black/60"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={reduce ? ENTER_REDUCED : ENTER} />
       <motion.div
         className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl"
-        initial={{ opacity: 0, scale: reduce ? 1 : 0.92, y: reduce ? 0 : 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
+        // Opaque from the first frame on the way in: any opacity below 1 shows
+        // whatever is behind the dialog. Only the size and offset animate.
+        initial={{ scale: reduce ? 1 : 0.92, y: reduce ? 0 : 12 }}
+        animate={{ scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: reduce ? 1 : 0.93, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
         transition={reduce ? ENTER_REDUCED : ENTER}>
         <div className="flex min-h-11 shrink-0 items-center gap-2 px-5 pt-3">
