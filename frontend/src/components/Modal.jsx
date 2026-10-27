@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { CaretLeftIcon as CaretLeft, XIcon as X } from "@phosphor-icons/react";
 import { IconButton } from "./Button";
@@ -46,6 +46,12 @@ function unlockScroll() {
 // the X button or Escape, never the scrim.
 export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, children }) {
   const reduce = useReducedMotion();
+  // The body only becomes a scroll container once the card has settled. A
+  // scrollable child is promoted to its own compositor layer, and while the
+  // card is still animating its own layer can be rastered a frame behind that
+  // child, which flashed the dialog transparent on mobile. Nothing is promoted
+  // mid-animation now, so there is no race to lose.
+  const [scrollable, setScrollable] = useState(false);
   const root = useRef(null);
   const body = useRef(null);
   const heading = useRef(null);
@@ -104,8 +110,12 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
         initial={{ y: reduce ? 0 : 16 }}
         animate={{ y: 0 }}
         exit={{ opacity: 0, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
-        transition={reduce ? ENTER_REDUCED : ENTER}>
-        <div className="flex min-h-11 shrink-0 items-center gap-2 px-5 pt-3">
+        transition={reduce ? ENTER_REDUCED : ENTER}
+        onAnimationComplete={() => setScrollable(true)}>
+        {/* Paints its own ground for the same reason the scroller below does:
+            with the body promoted to its own layer, the card's background can
+            arrive a frame late and anything relying on it flashes through. */}
+        <div className="flex min-h-11 shrink-0 items-center gap-2 bg-surface-2 px-5 pt-3">
           {onBack && (
             <IconButton label="Back" size="sm" onClick={onBack} className="-ml-2 text-mute hover:text-ink">
               <CaretLeft size={20} weight="bold" />
@@ -119,7 +129,7 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
             <X size={18} weight="bold" />
           </IconButton>
         </div>
-        <div ref={body} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-surface-2 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none">
+        <div ref={body} tabIndex={-1} className={`min-h-0 flex-1 ${scrollable ? "overflow-y-auto" : "overflow-hidden"} overscroll-contain bg-surface-2 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none`}>
           {children}
         </div>
         {overlay && (
