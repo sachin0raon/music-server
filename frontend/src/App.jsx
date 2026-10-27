@@ -26,10 +26,11 @@ const NAV = [
 ];
 
 function PageGlow() {
-  const { track, open } = usePlayer();
-  // The full-screen player sits on an opaque ground and paints its own glow, so
-  // this one would be four full-screen gradient layers of pure overdraw.
-  if (open) return null;
+  const { track } = usePlayer();
+  // Kept mounted even while the full-screen player is open. Skipping it there
+  // looks like an obvious saving, but the player slides up over a few hundred
+  // milliseconds and only covers the viewport once it arrives, so unmounting on
+  // open left bare ground showing behind the sheet for the whole journey.
   return <Ambient track={track} className="fixed inset-0 -z-10" />;
 }
 
