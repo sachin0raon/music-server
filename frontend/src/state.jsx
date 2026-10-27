@@ -171,35 +171,54 @@ const readStore = (key, fallback) => {
   try { const raw = localStorage.getItem(key); return raw === null ? fallback : JSON.parse(raw); }
   catch { return fallback; }
 };
-// Cosine S-curve volume ramp (smooth derivative at both endpoints to eliminate DC clicks & pops)
+// Cosine S-curve volume ramp, to take the click out of starting and stopping
+// playback mid-waveform.
+//
+// Stepped on a timer rather than requestAnimationFrame, and over long enough to
+// be sampled properly. On a 60Hz display a frame is ~16.7ms, so the 25-35ms
+// ramps this replaces were evaluated two or three times: a staircase whose
+// middle step jumped about half the amplitude, which is the discontinuity the
+// ramp exists to avoid. These durations and this step give fifteen or more
+// steps of a few percent each.
+//
+// Element volume is still only applied at an audio block boundary (128 samples,
+// ~2.9ms), so this approximates a fade rather than performing one. Doing it
+// properly needs a Web Audio GainNode, which would route playback through an
+// AudioContext and put background playback at risk.
+const RAMP_STEP_MS = 8;
+const FADE_TRACK = 110; // swapping the source out from under playback
+const FADE_PLAY = 90;
+const FADE_PAUSE = 90;
+
 function rampVolume(audio, fromVol, toVol, durationMs) {
   return new Promise((resolve) => {
-    const isBackground = typeof document !== "undefined" && document.hidden;
-    if (!audio || durationMs <= 0 || fromVol === toVol || isBackground) {
+    // Never ramp while hidden: neither timers nor frames are reliable in a
+    // backgrounded tab, and a stalled ramp would leave playback silent.
+    const hidden = () => typeof document !== "undefined" && document.hidden;
+    if (!audio || durationMs <= 0 || fromVol === toVol || hidden()) {
       if (audio) audio.volume = toVol;
       resolve();
       return;
     }
     const startTime = performance.now();
     const tick = () => {
-      if (typeof document !== "undefined" && document.hidden) {
+      if (hidden()) {
         audio.volume = toVol;
         resolve();
         return;
       }
-      const elapsed = performance.now() - startTime;
-      const progress = Math.min(1, elapsed / durationMs);
+      const progress = Math.min(1, (performance.now() - startTime) / durationMs);
       const factor = 0.5 - 0.5 * Math.cos(progress * Math.PI);
       const currentVol = fromVol + (toVol - fromVol) * factor;
       audio.volume = Math.max(0, Math.min(1, currentVol));
       if (progress < 1) {
-        requestAnimationFrame(tick);
+        setTimeout(tick, RAMP_STEP_MS);
       } else {
         audio.volume = toVol;
         resolve();
       }
     };
-    requestAnimationFrame(tick);
+    tick();
   });
 }
 
@@ -406,7 +425,7 @@ export function PlayerProvider({ children }) {
       // 1. If actively playing in foreground, perform a 35ms cosine S-curve fade-out to zero.
       // In background/lock-screen, skip fade-out and pause to maintain unbroken OS media session.
       if (!isBackground && !a.paused && a.currentTime > 0 && a.volume > 0) {
-        await rampVolume(a, a.volume, 0, 35);
+        await rampVolume(a, a.volume, 0, FADE_TRACK);
         if (cancelled) return;
         a.pause();
       }
@@ -427,7 +446,7 @@ export function PlayerProvider({ children }) {
         await a.play();
         if (cancelled) return;
         if (!isBackground && targetVol > 0) {
-          await rampVolume(a, 0, targetVol, 35);
+          await rampVolume(a, 0, targetVol, FADE_TRACK);
         } else {
           a.volume = targetVol;
         }
@@ -597,7 +616,7 @@ export function PlayerProvider({ children }) {
         a.volume = 0;
         try {
           await a.play();
-          if (targetVol > 0) await rampVolume(a, 0, targetVol, 30);
+          if (targetVol > 0) await rampVolume(a, 0, targetVol, FADE_PLAY);
         } catch {
           // ignore
         }
@@ -611,7 +630,7 @@ export function PlayerProvider({ children }) {
     const isBackground = typeof document !== "undefined" && document.hidden;
     if (!a.paused && a.volume > 0 && !isBackground) {
       const v = a.volume;
-      await rampVolume(a, v, 0, 25);
+      await rampVolume(a, v, 0, FADE_PAUSE);
       a.pause();
       a.volume = v;
     } else {
