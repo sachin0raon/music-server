@@ -1,4 +1,3 @@
-import { useCallback, useRef } from "react";
 import Cover from "./Cover";
 import Modal from "./Modal";
 import { fmt } from "../api";
@@ -8,17 +7,10 @@ import { usePlayer } from "../state";
 // long shuffled queue can be scanned without stepping through it one at a time.
 export default function QueueSheet({ onClose, fullScreen = false }) {
   const { queue, index, jumpTo } = usePlayer();
-  const currentRef = useRef(null);
   const remaining = Math.max(0, queue.length - index - 1);
 
-  // Deferred until the dialog reports itself settled. Scrolling the body while
-  // the card is still animating repaints it, which flashed the whole dialog.
-  const showCurrent = useCallback(() => {
-    currentRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
-  }, []);
-
   return (
-    <Modal label="Queue" title="Queue" onClose={onClose} fullScreen={fullScreen} onReady={showCurrent}>
+    <Modal label="Queue" title="Queue" onClose={onClose} fullScreen={fullScreen}>
       <p className="-mt-1 mb-2 text-small text-mute" role="status">
         {queue.length} {queue.length === 1 ? "track" : "tracks"} · {remaining} after this one
       </p>
@@ -26,7 +18,7 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
         {queue.map((t, i) => {
           const current = i === index;
           return (
-            <li key={`${t.id}-${i}`} ref={current ? currentRef : null}>
+            <li key={`${t.id}-${i}`}>
               <button onClick={() => { jumpTo(i); onClose(); }} aria-current={current ? "true" : undefined}
                 data-autofocus={current ? "" : undefined}
                 aria-label={`Play ${t.title} by ${t.artist}`}

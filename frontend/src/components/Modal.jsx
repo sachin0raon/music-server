@@ -44,7 +44,7 @@ function unlockScroll() {
 // Top-anchored dialog. The card is content-sized (no height animation), capped
 // at 85dvh, with a fixed bar and one scrollable body. Closing is explicit:
 // the X button or Escape, never the scrim.
-export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, onReady, children }) {
+export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, children }) {
   const reduce = useReducedMotion();
   const root = useRef(null);
   const body = useRef(null);
@@ -56,12 +56,6 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
   // once avoids re-adding a window listener on each one.
   const escape = useRef(onEscape || onClose);
   escape.current = onEscape || onClose;
-
-  // Anything that wants to scroll the body on open has to wait for this.
-  // Scrolling it while the card is still animating forces the container to be
-  // promoted mid-transform, and the card repaints.
-  const ready = useRef(onReady);
-  ready.current = onReady;
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") escape.current?.(); };
     window.addEventListener("keydown", onKey);
@@ -115,8 +109,7 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
         initial={{ y: reduce ? 0 : 16 }}
         animate={{ y: 0 }}
         exit={{ opacity: 0, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
-        transition={reduce ? ENTER_REDUCED : ENTER}
-        onAnimationComplete={() => ready.current?.()}>
+        transition={reduce ? ENTER_REDUCED : ENTER}>
         {/* Paints its own ground for the same reason the scroller below does:
             with the body promoted to its own layer, the card's background can
             arrive a frame late and anything relying on it flashes through. */}
