@@ -44,7 +44,7 @@ function unlockScroll() {
 // Top-anchored dialog. The card is content-sized (no height animation), capped
 // at 85dvh, with a fixed bar and one scrollable body. Closing is explicit:
 // the X button or Escape, never the scrim.
-export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, children }) {
+export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, onReady, children }) {
   const reduce = useReducedMotion();
   // The body only becomes a scroll container once the card has settled. A
   // scrollable child is promoted to its own compositor layer, and while the
@@ -62,6 +62,13 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
   // once avoids re-adding a window listener on each one.
   const escape = useRef(onEscape || onClose);
   escape.current = onEscape || onClose;
+
+  // Anything that wants to scroll the body on open has to wait for this.
+  // Scrolling it while the card is still animating forces the container to be
+  // promoted mid-transform, and the card repaints.
+  const ready = useRef(onReady);
+  ready.current = onReady;
+  useEffect(() => { if (scrollable) ready.current?.(); }, [scrollable]);
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") escape.current?.(); };
     window.addEventListener("keydown", onKey);
@@ -115,7 +122,11 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
         {/* Paints its own ground for the same reason the scroller below does:
             with the body promoted to its own layer, the card's background can
             arrive a frame late and anything relying on it flashes through. */}
-        <div className="flex min-h-11 shrink-0 items-center gap-2 bg-surface-2 px-5 pt-3">
+        {/* Its own compositing layer, painted once. Left in the card's layer it
+            was repainted every time the scrolling body below invalidated that
+            layer, and the frames where its tiles were not ready showed straight
+            through to whatever sits behind the dialog. */}
+        <div className="flex min-h-11 shrink-0 transform-gpu items-center gap-2 bg-surface-2 px-5 pt-3">
           {onBack && (
             <IconButton label="Back" size="sm" onClick={onBack} className="-ml-2 text-mute hover:text-ink">
               <CaretLeft size={20} weight="bold" />

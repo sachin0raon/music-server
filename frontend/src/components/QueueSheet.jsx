@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import Cover from "./Cover";
 import Modal from "./Modal";
 import { fmt } from "../api";
@@ -11,17 +11,14 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
   const currentRef = useRef(null);
   const remaining = Math.max(0, queue.length - index - 1);
 
-  useEffect(() => {
-    if (currentRef.current) {
-      const id = requestAnimationFrame(() => {
-        currentRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
-      });
-      return () => cancelAnimationFrame(id);
-    }
+  // Deferred until the dialog reports itself settled. Scrolling the body while
+  // the card is still animating repaints it, which flashed the whole dialog.
+  const showCurrent = useCallback(() => {
+    currentRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
   }, []);
 
   return (
-    <Modal label="Queue" title="Queue" onClose={onClose} fullScreen={fullScreen}>
+    <Modal label="Queue" title="Queue" onClose={onClose} fullScreen={fullScreen} onReady={showCurrent}>
       <p className="-mt-1 mb-2 text-small text-mute" role="status">
         {queue.length} {queue.length === 1 ? "track" : "tracks"} · {remaining} after this one
       </p>
