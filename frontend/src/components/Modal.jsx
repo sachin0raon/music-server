@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { CaretLeftIcon as CaretLeft, XIcon as X } from "@phosphor-icons/react";
 import { IconButton } from "./Button";
@@ -46,12 +46,6 @@ function unlockScroll() {
 // the X button or Escape, never the scrim.
 export default function Modal({ label, title, onBack, actions, onClose, onEscape, fullScreen = false, scrollKey, overlay, onReady, children }) {
   const reduce = useReducedMotion();
-  // The body only becomes a scroll container once the card has settled. A
-  // scrollable child is promoted to its own compositor layer, and while the
-  // card is still animating its own layer can be rastered a frame behind that
-  // child, which flashed the dialog transparent on mobile. Nothing is promoted
-  // mid-animation now, so there is no race to lose.
-  const [scrollable, setScrollable] = useState(false);
   const root = useRef(null);
   const body = useRef(null);
   const heading = useRef(null);
@@ -68,7 +62,6 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
   // promoted mid-transform, and the card repaints.
   const ready = useRef(onReady);
   ready.current = onReady;
-  useEffect(() => { if (scrollable) ready.current?.(); }, [scrollable]);
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") escape.current?.(); };
     window.addEventListener("keydown", onKey);
@@ -118,7 +111,7 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
         animate={{ y: 0 }}
         exit={{ opacity: 0, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
         transition={reduce ? ENTER_REDUCED : ENTER}
-        onAnimationComplete={() => setScrollable(true)}>
+        onAnimationComplete={() => ready.current?.()}>
         {/* Paints its own ground for the same reason the scroller below does:
             with the body promoted to its own layer, the card's background can
             arrive a frame late and anything relying on it flashes through. */}
@@ -140,7 +133,12 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
             <X size={18} weight="bold" />
           </IconButton>
         </div>
-        <div ref={body} tabIndex={-1} className={`min-h-0 flex-1 ${scrollable ? "overflow-y-auto" : "overflow-hidden"} overscroll-contain bg-surface-2 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none`}>
+        {/* Promoted from the first frame, like the header. Every compositor
+            layer this dialog needs exists before the card starts moving: a
+            layer created part way through, whether by a scroll container
+            appearing or by one being scrolled, costs a raster and the dialog
+            flashes for that frame. */}
+        <div ref={body} tabIndex={-1} className="min-h-0 flex-1 transform-gpu overflow-y-auto overscroll-contain bg-surface-2 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none">
           {children}
         </div>
         {overlay && (
