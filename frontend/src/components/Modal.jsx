@@ -98,7 +98,12 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
         transition={reduce ? ENTER_REDUCED : ENTER} />
       <motion.div
-        className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl"
+        // will-change rather than transform-gpu: motion writes transform
+        // inline and would override it. Without this the card is promoted only
+        // while it animates, so settling drops the layer and repaints it, and
+        // its border and corners flashed for that frame. The interior is
+        // covered by the header and body, which own their own layers.
+        className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl will-change-transform"
         // Opaque from the first frame on the way in: any opacity below 1 shows
         // whatever is behind the dialog.
         //
