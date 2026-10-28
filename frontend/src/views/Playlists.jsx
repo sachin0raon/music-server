@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { PlayIcon as Play, PlaylistIcon as Playlist } from "@phosphor-icons/react";
+import { PlayIcon as Play, PlaylistIcon as Playlist, QueueIcon as Queue } from "@phosphor-icons/react";
 import TrackRow from "../components/TrackRow";
 import TrackMenu from "../components/TrackMenu";
 import PageHeader, { BackLink } from "../components/PageHeader";
@@ -11,7 +11,8 @@ import Field from "../components/Field";
 import { Button } from "../components/Button";
 import { Empty, ErrorBox, Skeleton } from "../components/States";
 import { api } from "../api";
-import { useData, useFetch, usePlayer } from "../state";
+import { useData, useFetch, usePlayer, useToast } from "../state";
+import useSelection from "../components/useSelection";
 import { transition } from "../motion";
 
 export function PlaylistsIndex() {
@@ -61,7 +62,8 @@ export function PlaylistDetail() {
   const { id } = useParams();
   const { data, loading, error, reload } = useFetch(`/api/playlists/${id}`);
   const { bump } = useData();
-  const { playTrack, reorderQueue, track: current, playing } = usePlayer();
+  const { playTrack, reorderQueue, addToQueue, track: current, playing } = usePlayer();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const source = { type: "playlist", id }; // tags this playlist's queue, so reorders follow it
   const [menu, setMenu] = useState(null);
@@ -69,6 +71,17 @@ export function PlaylistDetail() {
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
   const [order, setOrder] = useState([]); // local play order while reordering
+  const { selected, count, isSelected, toggle, clear } = useSelection(order);
+
+  const queueSelected = () => {
+    const { added, skipped } = addToQueue(selected);
+    showToast(
+      added
+        ? `Added ${added} ${added === 1 ? "track" : "tracks"} to the queue${skipped ? `, ${skipped} already there` : ""}`
+        : "Already in the queue",
+    );
+    clear();
+  };
   const [announce, setAnnounce] = useState(""); // so a keyboard/screen-reader move is not silent
   const rowRefs = useRef(new Map());
   const pendingFocus = useRef(null);
@@ -141,6 +154,12 @@ export function PlaylistDetail() {
           </div>
           <div className="mb-5 flex flex-wrap gap-2">
             {order.length > 0 && <Button variant="accent" onClick={() => playTrack(order[0], order, source)}><Play weight="fill" size={16} />Play</Button>}
+            {count > 0 && (
+              <>
+                <Button variant="accent" onClick={queueSelected}><Queue size={16} weight="bold" />Add {count} to queue</Button>
+                <Button onClick={clear}>Clear</Button>
+              </>
+            )}
             <Button onClick={() => { setName(data.name); setMode("rename"); }}>Rename</Button>
             <Button onClick={() => setMode("delete")}>Delete</Button>
           </div>
@@ -167,6 +186,7 @@ export function PlaylistDetail() {
                   const active = current?.id === t.id;
                   return (
                     <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
+                      selectable selected={isSelected(t)} onSelect={toggle}
                       onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)}
                       active={active} eq={active && playing} onPlay={playTrack} />
                   );

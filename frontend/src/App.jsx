@@ -5,6 +5,7 @@ import { PlaylistIcon as Playlist, MagnifyingGlassIcon as MagnifyingGlass, Music
 import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, usePlayer, useToast } from "./state";
 import Ambient from "./components/Ambient";
 import PlayerBar from "./components/PlayerBar";
+import QueueFab from "./components/QueueFab";
 import MediaSessionBridge from "./components/MediaSessionBridge";
 import { transition } from "./motion";
 
@@ -44,7 +45,7 @@ function Page({ children }) {
 
 
 function Shell() {
-  const { open, track } = usePlayer();
+  const { open, track, queue, index } = usePlayer();
   const location = useLocation();
   const { pathname } = location;
   return (
@@ -94,6 +95,8 @@ function Shell() {
       </div>
 
       <AnimatePresence>{track && <PlayerBar key="player-bar" track={track} />}</AnimatePresence>
+      {/* Stands in for the player bar while a hand-built queue waits to be started */}
+      <AnimatePresence>{queue.length > 0 && index < 0 && <QueueFab key="queue-fab" />}</AnimatePresence>
       <nav aria-label="Main" className="glass-bar fixed inset-x-0 bottom-0 z-30 flex justify-around rounded-none border-x-0 border-b-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-micro font-medium transition-colors duration-[160ms] ${isActive ? "text-ink" : "text-mute"}`}>

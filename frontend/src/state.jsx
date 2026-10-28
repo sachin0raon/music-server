@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { canGoNext, nextStep, restoreOrder, shuffledQueue } from "./playqueue";
+import { appendUnique, canGoNext, nextStep, restoreOrder, shuffledQueue } from "./playqueue";
 import { applyNowPlaying, applyPlaybackState, applyPosition } from "./mediasession";
 
 /* ---------- auth ---------- */
@@ -603,6 +603,23 @@ export function PlayerProvider({ children }) {
     setQueue([...q, ...add]);
   }, []);
 
+  // Put tracks at the end of whatever is playing. Unlike extendQueue this is not
+  // tied to the list the queue came from: it is the user choosing, so there is no
+  // source to match. The index is deliberately untouched -- adding to a queue that
+  // has never been started leaves it unstarted, which is what the floating play
+  // button watches for.
+  const addToQueue = useCallback((items) => {
+    const q = qRef.current;
+    const { items: next, added, skipped } = appendUnique(q, items);
+    if (added) {
+      // Keep the remembered pre-shuffle order in step, or turning shuffle off
+      // would drop everything added while it was on.
+      if (origOrder.current) origOrder.current = [...origOrder.current, ...next.slice(q.length).map((t) => t.id)];
+      setQueue(next);
+    }
+    return { added, skipped };
+  }, []);
+
   const play = useCallback(async () => {
     const a = audioRef.current;
     if (!a) return;
@@ -681,9 +698,9 @@ export function PlayerProvider({ children }) {
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
     track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
-    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, volume, muted, setVolume, toggleMute,
+    shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, addToQueue, volume, muted, setVolume, toggleMute,
   }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
-       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, volume, muted, setVolume, toggleMute]);
+       shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, addToQueue, volume, muted, setVolume, toggleMute]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
   return (

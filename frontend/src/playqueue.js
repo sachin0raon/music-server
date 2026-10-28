@@ -46,3 +46,24 @@ export function nextStep({ index, length, repeat, auto }) {
 export function canGoNext({ index, length, repeat }) {
   return length > 0 && (index + 1 < length || repeat !== "off");
 }
+
+// Append tracks to a queue, skipping any already in it and any repeated within
+// the batch itself. The queue is identified by track id throughout -- the
+// remembered shuffle order, removal and reordering all key on it -- so the same
+// track cannot appear twice. Returns the new list and what happened, so the
+// caller can say so.
+export function appendUnique(queue, items) {
+  const list = (Array.isArray(items) ? items : [items]).filter(Boolean);
+  const have = new Set(queue.map((t) => t.id));
+  const add = [];
+  for (const t of list) {
+    if (have.has(t.id)) continue;
+    have.add(t.id);
+    add.push(t);
+  }
+  return {
+    items: add.length ? [...queue, ...add] : queue,
+    added: add.length,
+    skipped: list.length - add.length,
+  };
+}
