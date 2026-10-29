@@ -36,9 +36,7 @@ export default function MediaLinkImport() {
   const { bump } = useData();
   const [url, setUrl] = useState("");
   const [item, setItem] = useState(null);      // probe result
-  const [formatId, setFormatId] = useState("");
-  const [asMp3, setAsMp3] = useState(false);
-  const [bitrate, setBitrate] = useState(320);
+  const [choice, setChoice] = useState("");   // "src:<format id>" | "mp3:<bitrate>"
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState(null);
   const [err, setErr] = useState("");
@@ -95,7 +93,7 @@ export default function MediaLinkImport() {
     try {
       const d = await api.post("/api/media/probe-link", { url: value });
       setItem(d);
-      setFormatId(d.formats[0]?.id ?? "");
+      setChoice(d.formats[0] ? `src:${d.formats[0].id}` : "");
     } catch (ex) {
       setErr(ex.message);
     } finally {
@@ -104,21 +102,25 @@ export default function MediaLinkImport() {
   }, [url, busy]);
 
   const start = useCallback(async () => {
-    if (!item || !formatId || busy) return;
+    if (!item || !choice || busy) return;
+    const [kind, value] = choice.split(":");
     setBusy(true); setErr("");
     try {
-      const body = { url: url.trim(), format_id: formatId };
-      if (asMp3) { body.convert = "mp3"; body.bitrate = bitrate; }
+      // An MP3 choice is a conversion target, not a stream the site has, so it
+      // converts from the best one on offer.
+      const body = kind === "mp3"
+        ? { url: url.trim(), format_id: item.formats[0].id, convert: "mp3", bitrate: +value }
+        : { url: url.trim(), format_id: value };
       setJob(await api.post("/api/media/fetch", body));
     } catch (ex) {
       setErr(ex.message);
     } finally {
       setBusy(false);
     }
-  }, [item, formatId, asMp3, bitrate, url, busy]);
+  }, [item, choice, url, busy]);
 
   const reset = useCallback(() => {
-    setUrl(""); setItem(null); setFormatId(""); setJob(null); setErr("");
+    setUrl(""); setItem(null); setChoice(""); setJob(null); setErr("");
   }, []);
 
   return (
@@ -167,32 +169,32 @@ export default function MediaLinkImport() {
             <div className="mt-2 space-y-1.5">
               {item.formats.map((f) => (
                 <label key={f.id} className="interactive flex cursor-pointer items-center gap-3 rounded-tile px-2 py-2">
-                  <input type="radio" name="media-format" value={f.id} checked={formatId === f.id}
-                    onChange={() => setFormatId(f.id)} className="accent-accent" />
+                  <input type="radio" name="media-format" value={`src:${f.id}`}
+                    checked={choice === `src:${f.id}`} onChange={() => setChoice(`src:${f.id}`)}
+                    className="accent-accent" />
                   <span className="min-w-0 flex-1 truncate text-small">{formatLabel(f)}</span>
                   <span className="shrink-0 text-micro text-mute">{f.ext}</span>
+                </label>
+              ))}
+
+              {/* In the same group because it is the same decision: what ends up
+                  in the library. These are not streams the site offers, so they
+                  are converted from the best one that it does. */}
+              <p className="pt-2 text-micro text-mute">Converted from the best stream</p>
+              {MP3_BITRATES.map((b) => (
+                <label key={b} className="interactive flex cursor-pointer items-center gap-3 rounded-tile px-2 py-2">
+                  <input type="radio" name="media-format" value={`mp3:${b}`}
+                    checked={choice === `mp3:${b}`} onChange={() => setChoice(`mp3:${b}`)}
+                    className="accent-accent" />
+                  <span className="min-w-0 flex-1 truncate text-small">{`MP3 · ${b} kbps`}</span>
+                  <span className="shrink-0 text-micro text-mute">mp3</span>
                 </label>
               ))}
             </div>
           </fieldset>
 
-          <label className="mt-4 flex items-center gap-2.5 text-small">
-            <input type="checkbox" checked={asMp3} onChange={(e) => setAsMp3(e.target.checked)}
-              className="accent-accent" />
-            Convert to MP3
-          </label>
-          {asMp3 ? (
-            <div className="mt-2 flex items-center gap-2">
-              <label htmlFor="mp3-bitrate" className="text-small text-mute">Bitrate</label>
-              <select id="mp3-bitrate" value={bitrate} onChange={(e) => setBitrate(+e.target.value)}
-                className="field !min-h-9 w-auto px-2 text-small">
-                {MP3_BITRATES.map((b) => <option key={b} value={b}>{b} kbps</option>)}
-              </select>
-            </div>
-          ) : null}
-
           <div className="mt-4 flex gap-2">
-            <Button variant="accent" onClick={start} disabled={busy || !formatId}>
+            <Button variant="accent" onClick={start} disabled={busy || !choice}>
               <DownloadSimple size={16} weight="bold" />Download
             </Button>
             <Button onClick={reset} disabled={busy}>Cancel</Button>
