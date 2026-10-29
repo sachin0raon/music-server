@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue, XIcon as X } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
@@ -192,12 +192,17 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
           under the bottom navigation on a phone, and the import action would be lost */}
       {selected.size > 0 && (
         <GlassPanel className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+          {/* The count carries the number, so the buttons do not repeat it:
+              three labelled buttons plus a count wrapped onto two lines on a
+              phone. */}
           <p className="mr-auto whitespace-nowrap text-small text-mute">{selected.size} selected</p>
           <Button variant="accent" small onClick={importSelected} disabled={importing}>
-            {importing ? "Importing" : `Import ${selected.size === 1 ? "this song" : `${selected.size} songs`}`}
+            {importing ? "Importing" : "Import"}
           </Button>
-          <Button small onClick={queueSelected} disabled={importing}><Queue size={16} weight="bold" />Add to queue</Button>
-          <Button small onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
+          <Button small onClick={queueSelected} disabled={importing}><Queue size={16} weight="bold" />Queue</Button>
+          <IconButton size="sm" label="Clear selection" onClick={() => setSelected(new Set())} disabled={importing}>
+            <X size={16} weight="bold" />
+          </IconButton>
         </GlassPanel>
       )}
 
