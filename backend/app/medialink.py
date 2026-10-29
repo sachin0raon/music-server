@@ -30,7 +30,11 @@ from .models import User
 from .ratelimit import RateLimiter
 from .tracks import ALLOWED_EXT, FileUpload, _process, _result
 
-router = APIRouter(prefix="/api/tracks", tags=["medialink"])
+# Its own prefix, not /api/tracks: that router ends in a catch-all GET
+# /{track_id} parsed as an int, so any literal path added under it is shadowed
+# unless the include order happens to be right. These are links and jobs rather
+# than tracks in any case.
+router = APIRouter(prefix="/api/media", tags=["medialink"])
 
 YTDLP_PINNED = "2026.10.26"  # keep in step with requirements.txt
 
@@ -105,26 +109,80 @@ def _cached_probe(url: str) -> dict:
         _probe_cache[url] = (now, item)
     return item
 
-def _audio_formats(info: dict) -> list[dict]:
-    """Audio-only streams, best first.
+# Containers that only ever carry audio. Consulted only when an extractor says
+# nothing about codecs at all; webm is left out because it is usually video, and
+# a webm that is audio-only says so through vcodec.
+AUDIO_EXTS = {"m4a", "mp3", "opus", "ogg", "oga", "aac", "flac", "wav", "mka", "weba"}
 
-    Entries carrying video are dropped rather than offered and stripped later:
-    downloading a video stream to throw the picture away wastes the bandwidth
-    and the time.
+
+def _formats_of(info: dict) -> list[dict]:
+    """Every format, including the shape where there is only one.
+
+    An extractor that yields a single format leaves `formats` unset and puts the
+    fields at the top level; yt-dlp's own _get_formats does exactly this, and
+    reading `info["formats"]` alone finds nothing for those sites.
+    """
+    if info.get("formats"):
+        return info["formats"]
+    return [info] if info.get("url") else []
+
+
+def _is_audio_only(f: dict) -> bool:
+    """Whether a format carries sound and no picture.
+
+    Deliberately not a test for `acodec != "none"`: plenty of extractors fill in
+    neither codec, and treating a missing acodec as "no audio" threw away every
+    format they offered and reported the link as having no audio at all.
+    """
+    if f.get("height") or f.get("width") or f.get("fps"):
+        return False  # it has a picture whatever the codecs claim
+    vcodec, acodec = f.get("vcodec"), f.get("acodec")
+    if vcodec and vcodec != "none":
+        return False
+    if acodec == "none":
+        return False
+    if acodec:
+        return True
+    return (f.get("ext") or "").lower() in AUDIO_EXTS  # nothing declared: trust the container
+
+
+def _entry(f: dict, muxed: bool) -> dict:
+    return {
+        "id": f.get("format_id"),
+        "ext": f.get("ext"),
+        "codec": (f.get("acodec") or "").split(".")[0],
+        "abr": round(f["abr"]) if f.get("abr") else None,
+        "size": f.get("filesize") or f.get("filesize_approx"),
+        "note": f.get("format_note") or (f"{f['height']}p" if f.get("height") else ""),
+        "muxed": muxed,
+    }
+
+
+def _audio_formats(info: dict) -> list[dict]:
+    """Audio-only streams, best first."""
+    out = [_entry(f, False) for f in _formats_of(info) if _is_audio_only(f)]
+    out.sort(key=lambda f: (f["abr"] or 0), reverse=True)
+    return out
+
+
+def _muxed_formats(info: dict) -> list[dict]:
+    """Streams carrying both picture and sound, as a fallback.
+
+    Plenty of sites serve nothing else, and refusing those outright would reject
+    links that yt-dlp handles perfectly well -- the audio is simply copied out
+    and the picture discarded. The cost is downloading a video to keep the sound
+    from it, so these are offered only when there is no audio-only stream, and
+    the smallest picture wins once the audio is as good as it gets.
     """
     out = []
-    for f in info.get("formats") or []:
-        if f.get("acodec") in (None, "none") or f.get("vcodec") not in (None, "none"):
+    for f in _formats_of(info):
+        if _is_audio_only(f) or f.get("acodec") == "none":
             continue
-        out.append({
-            "id": f.get("format_id"),
-            "ext": f.get("ext"),
-            "codec": (f.get("acodec") or "").split(".")[0],
-            "abr": round(f["abr"]) if f.get("abr") else None,
-            "size": f.get("filesize") or f.get("filesize_approx"),
-            "note": f.get("format_note") or "",
-        })
-    out.sort(key=lambda f: (f["abr"] or 0), reverse=True)
+        has_picture = f.get("height") or f.get("width") or (f.get("vcodec") not in (None, "none"))
+        if not has_picture:
+            continue
+        out.append(_entry(f, True))
+    out.sort(key=lambda f: (-(f["abr"] or 0), f["size"] or 0))
     return out
 
 
@@ -153,9 +211,9 @@ def _probe(url: str) -> dict:
         # noplaylist should have prevented this; a bare playlist URL still reaches it.
         raise LinkError("That link is a playlist. Paste a link to a single track.")
 
-    formats = _audio_formats(info)
+    formats = _audio_formats(info) or _muxed_formats(info)
     if not formats:
-        raise LinkError("That link has no audio-only stream to download.")
+        raise LinkError("That link has no audio this app can download.")
 
     return {
         "title": info.get("title") or "",
@@ -364,7 +422,7 @@ def probe_link(body: ProbeBody, user: User = Depends(current_user)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/from-media-link")
+@router.post("/fetch")
 def from_media_link(body: FetchBody, user: User = Depends(current_user)):
     """Start a download. Returns at once; poll the job for the rest."""
     _link_limiter.check(f"link:{user.id}")
@@ -389,7 +447,7 @@ def from_media_link(body: FetchBody, user: User = Depends(current_user)):
     return job.snapshot()
 
 
-@router.get("/media-jobs")
+@router.get("/jobs")
 def list_media_jobs(user: User = Depends(current_user)):
     """Whatever this user still has running.
 
@@ -402,6 +460,6 @@ def list_media_jobs(user: User = Depends(current_user)):
     return {"jobs": [j.snapshot() for j in mine]}
 
 
-@router.get("/media-jobs/{job_id}")
+@router.get("/jobs/{job_id}")
 def media_job(job_id: str, user: User = Depends(current_user)):
     return _get_job(job_id, user.id).snapshot()

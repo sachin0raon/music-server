@@ -56,7 +56,7 @@ export default function MediaLinkImport() {
   // nothing watching it.
   useEffect(() => {
     let live = true;
-    api.get("/api/tracks/media-jobs")
+    api.get("/api/media/jobs")
       .then((d) => {
         if (!live) return;
         const active = (d.jobs || []).find((j) => RUNNING.has(j.state));
@@ -74,7 +74,7 @@ export default function MediaLinkImport() {
     let timer = 0;
     const tick = async () => {
       try {
-        const next = await api.get(`/api/tracks/media-jobs/${jobId}`);
+        const next = await api.get(`/api/media/jobs/${jobId}`);
         if (!live) return;
         setJob(next);
         if (next.state === "done" && next.result?.status === "ok") bumpRef.current();
@@ -93,7 +93,7 @@ export default function MediaLinkImport() {
     if (!value || busy) return;
     setBusy(true); setErr(""); setItem(null); setJob(null);
     try {
-      const d = await api.post("/api/tracks/probe-link", { url: value });
+      const d = await api.post("/api/media/probe-link", { url: value });
       setItem(d);
       setFormatId(d.formats[0]?.id ?? "");
     } catch (ex) {
@@ -109,7 +109,7 @@ export default function MediaLinkImport() {
     try {
       const body = { url: url.trim(), format_id: formatId };
       if (asMp3) { body.convert = "mp3"; body.bitrate = bitrate; }
-      setJob(await api.post("/api/tracks/from-media-link", body));
+      setJob(await api.post("/api/media/fetch", body));
     } catch (ex) {
       setErr(ex.message);
     } finally {
@@ -155,6 +155,15 @@ export default function MediaLinkImport() {
 
           <fieldset className="mt-4">
             <legend className="text-small text-mute">Audio to download</legend>
+            {/* Only shown when the page has no audio-only stream: these carry a
+                picture that gets discarded, so the download is larger than the
+                track. Worth saying rather than quietly spending the bandwidth. */}
+            {item.formats.some((f) => f.muxed) ? (
+              <p className="mt-1 max-w-[68ch] text-micro text-mute">
+                This page has no audio-only stream. These include video and only the audio is kept,
+                so the download is larger than the track.
+              </p>
+            ) : null}
             <div className="mt-2 space-y-1.5">
               {item.formats.map((f) => (
                 <label key={f.id} className="interactive flex cursor-pointer items-center gap-3 rounded-tile px-2 py-2">
