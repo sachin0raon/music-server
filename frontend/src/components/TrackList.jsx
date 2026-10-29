@@ -56,7 +56,12 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
         // The card is tinted from its own cover, so the list below reads as one piece with it
         <GlassPanel as={motion.section} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
           transition={transition.slow}
-          className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6"
+          className="mb-4 flex gap-4 bg-clip-padding p-3.5 sm:gap-6 sm:p-6"
+          // bg-clip-padding keeps the tint out from under the border. The border
+          // is translucent white, so a background that is strongly coloured at
+          // one corner and clear at the other shows through it and the edge
+          // reads brighter on one side than the other.
+          //
           // The second layer restates .glass-flat, which this element's own
           // background would otherwise replace. Keep the two in step.
           style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.045))` }}>
