@@ -189,22 +189,49 @@ const RAMP_STEP_MS = 8;
 const FADE_TRACK = 110; // swapping the source out from under playback
 const FADE_PLAY = 90;
 const FADE_PAUSE = 90;
+const FADE_SEEK = 35; // short: a scrub should not feel like it lags the finger
 
+// Only one ramp may own an element at a time. Two running together -- a pause
+// fade and a play fade started a moment apart -- both write volume every few
+// milliseconds, and the value oscillates between them, which is audible.
+// Starting a ramp takes ownership; the older one sees that and stops.
+const rampOwner = new WeakMap();
+let nextRamp = 0;
+
+// Set the level outright, taking the element away from any ramp still running
+// on it. Nothing writes audio.volume without going through this or through a
+// ramp: a bare assignment would be overwritten a few milliseconds later by a
+// fade that had not finished, or would fight it the whole way down.
+function applyVolume(audio, v) {
+  if (!audio) return;
+  rampOwner.set(audio, ++nextRamp);
+  audio.volume = Math.max(0, Math.min(1, v));
+}
+
+// Resolves true when the ramp reached its target, false when a newer ramp took
+// over. Callers that act on completion -- pausing, moving the playhead -- must
+// not act when it is false.
 function rampVolume(audio, fromVol, toVol, durationMs) {
   return new Promise((resolve) => {
     // Never ramp while hidden: neither timers nor frames are reliable in a
     // backgrounded tab, and a stalled ramp would leave playback silent.
     const hidden = () => typeof document !== "undefined" && document.hidden;
     if (!audio || durationMs <= 0 || fromVol === toVol || hidden()) {
-      if (audio) audio.volume = toVol;
-      resolve();
+      applyVolume(audio, toVol); // still supersedes whatever was running
+      resolve(true);
       return;
     }
+    const mine = ++nextRamp;
+    rampOwner.set(audio, mine);
     const startTime = performance.now();
     const tick = () => {
+      if (rampOwner.get(audio) !== mine) {
+        resolve(false);
+        return;
+      }
       if (hidden()) {
         audio.volume = toVol;
-        resolve();
+        resolve(true);
         return;
       }
       const progress = Math.min(1, (performance.now() - startTime) / durationMs);
@@ -215,7 +242,7 @@ function rampVolume(audio, fromVol, toVol, durationMs) {
         setTimeout(tick, RAMP_STEP_MS);
       } else {
         audio.volume = toVol;
-        resolve();
+        resolve(true);
       }
     };
     tick();
@@ -324,7 +351,14 @@ export function PlayerProvider({ children }) {
     const want = srcFor(upcoming);
     if (!want || !spare || spare.getAttribute("src") !== want) return false;
     const a = audioRef.current;
-    spare.volume = muteRef.current ? 0 : volRef.current;
+    // Fade the incoming track up rather than starting it at full level. Not
+    // awaited: the play() below has to stay inside this event, and rampVolume
+    // sets the target outright while the tab is hidden, so background handoffs
+    // are unaffected.
+    const target = muteRef.current ? 0 : volRef.current;
+    const silent = target === 0 || (typeof document !== "undefined" && document.hidden);
+    applyVolume(spare, silent ? target : 0);
+    if (!silent) rampVolume(spare, 0, target, FADE_TRACK);
     try { if (spare.currentTime > 0) spare.currentTime = 0; } catch { /* not seekable yet */ }
     const started = spare.play();
     if (started) started.catch(() => {});
@@ -434,7 +468,7 @@ export function PlayerProvider({ children }) {
 
       // 2. Set new source
       if (!isBackground) {
-        a.volume = 0;
+        applyVolume(a, 0);
       }
       a.src = targetSrc;
       loadedSrc.current = targetSrc;
@@ -448,7 +482,7 @@ export function PlayerProvider({ children }) {
         if (!isBackground && targetVol > 0) {
           await rampVolume(a, 0, targetVol, FADE_TRACK);
         } else {
-          a.volume = targetVol;
+          applyVolume(a, targetVol);
         }
       } catch {
         if (!cancelled) setPlaying(false);
@@ -476,7 +510,7 @@ export function PlayerProvider({ children }) {
       return;
     }
     if (spare.getAttribute("src") === want) return;
-    spare.volume = 0; // silent until the handoff raises it, in case it ever self-starts
+    applyVolume(spare, 0); // silent until the handoff raises it, in case it ever self-starts
     spare.src = want;
     spare.load();
   }, [index, queue, repeat, nearEnd]);
@@ -510,7 +544,7 @@ export function PlayerProvider({ children }) {
 
   // Apply the chosen level to the element; this also restores it on first mount,
   // so a persisted volume is in place before the first play.
-  useEffect(() => { const a = audioRef.current; if (a) a.volume = muted ? 0 : volume; }, [volume, muted]);
+  useEffect(() => { applyVolume(audioRef.current, muted ? 0 : volume); }, [volume, muted]);
   useEffect(() => { if (volume > 0) lastVolume.current = volume; }, [volume]);
   useEffect(() => {
     try {
@@ -620,39 +654,34 @@ export function PlayerProvider({ children }) {
     return { added, skipped };
   }, []);
 
+  // Deliberately not guarded on a.paused alone: a pause fade is still running
+  // with the element unpaused, and bailing there swallowed the tap entirely.
+  // Coming back up to the target from wherever the volume currently is covers
+  // both cases, and taking the ramp over stops the pause from landing.
   const play = useCallback(async () => {
     const a = audioRef.current;
     if (!a) return;
     const targetVol = muted ? 0 : volume;
     const isBackground = typeof document !== "undefined" && document.hidden;
     if (a.paused) {
-      if (isBackground) {
-        a.volume = targetVol;
-        try { await a.play(); } catch {}
-      } else {
-        a.volume = 0;
-        try {
-          await a.play();
-          if (targetVol > 0) await rampVolume(a, 0, targetVol, FADE_PLAY);
-        } catch {
-          // ignore
-        }
-      }
+      applyVolume(a, isBackground ? targetVol : 0);
+      try { await a.play(); } catch { return; }
     }
+    if (isBackground || targetVol === 0) { applyVolume(a, targetVol); return; }
+    await rampVolume(a, a.volume, targetVol, FADE_PLAY);
   }, [muted, volume]);
 
   const pause = useCallback(async () => {
     const a = audioRef.current;
-    if (!a) return;
+    if (!a || a.paused) return;
+    const target = muteRef.current ? 0 : volRef.current;
     const isBackground = typeof document !== "undefined" && document.hidden;
-    if (!a.paused && a.volume > 0 && !isBackground) {
-      const v = a.volume;
-      await rampVolume(a, v, 0, FADE_PAUSE);
-      a.pause();
-      a.volume = v;
-    } else {
-      a.pause();
-    }
+    if (isBackground || a.volume === 0) { a.pause(); return; }
+    // A play tap landing mid-fade takes the ramp over; pausing anyway would
+    // stop the track the user just asked to resume.
+    if (!(await rampVolume(a, a.volume, 0, FADE_PAUSE))) return;
+    a.pause();
+    applyVolume(a, target); // restored from the setting, not from mid-fade
   }, []);
 
   const toggle = useCallback(() => {
@@ -669,7 +698,33 @@ export function PlayerProvider({ children }) {
     if (i === iRef.current) restart(); else setIndex(i);
   }, [restart]);
 
-  const seek = useCallback((t) => { audioRef.current.currentTime = t; setTime(t); }, []);
+  // Moving the playhead cuts the waveform wherever it happens to be, so the
+  // volume is taken down first. A range input reports every value as the finger
+  // moves, so the duck is held for the whole drag and released once the values
+  // stop arriving -- ducking and restoring per value would warble.
+  const seekDuck = useRef({ active: false, timer: 0 });
+  const seek = useCallback(async (t) => {
+    const a = audioRef.current;
+    if (!a) return;
+    setTime(t);
+    const target = muteRef.current ? 0 : volRef.current;
+    if (a.paused || target === 0 || (typeof document !== "undefined" && document.hidden)) {
+      a.currentTime = t;
+      return;
+    }
+    const d = seekDuck.current;
+    if (!d.active) {
+      d.active = true;
+      if (!(await rampVolume(a, a.volume, 0, FADE_SEEK))) { d.active = false; return; }
+    }
+    a.currentTime = t;
+    clearTimeout(d.timer);
+    d.timer = setTimeout(() => {
+      d.active = false;
+      const el = audioRef.current;
+      if (el && !el.paused) rampVolume(el, el.volume, muteRef.current ? 0 : volRef.current, FADE_SEEK);
+    }, 140);
+  }, []);
   // Volume is stored on the audio element's own 0..1 scale; dragging off zero unmutes.
   const setVolume = useCallback((v) => {
     const nv = Math.max(0, Math.min(1, v));
