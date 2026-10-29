@@ -20,7 +20,7 @@ const PureTrackRow = memo(function PureTrackRow({
   return (
     <motion.li ref={rowRef} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
       transition={reduce ? { duration: 0 } : { ...transition.base, delay: index < 12 ? index * 0.022 : 0 }}
-      className={`track-row-item group relative flex items-center gap-1 pr-2 transition-[background-color] duration-[160ms] sm:pr-3 ${active ? "bg-accent-soft" : selected ? "bg-white/[0.08]" : "hover:bg-white/[0.05] focus-within:bg-white/[0.05]"}`}>
+      className={`track-row-item group relative flex items-center gap-1 pr-2 transition-[background-color] duration-[160ms] sm:pr-3 ${active ? "bg-accent-soft" : selected ? "bg-white/[0.08]" : "hover:bg-white/[0.05] has-[:focus-visible]:bg-white/[0.05]"}`}>
       {selectable && (
         <button type="button" role="checkbox" aria-checked={selected} aria-label={`Select ${track.title}`}
           onClick={() => onSelect?.(track)} className="grid min-h-[64px] place-items-center pl-3.5 pr-1.5 sm:pl-4">
@@ -34,7 +34,7 @@ const PureTrackRow = memo(function PureTrackRow({
         {/* The scale sits on the wrapper, not the Cover, so the hover overlay grows with the image instead of leaving a ring of un-darkened cover around it */}
         <span className="relative shrink-0 transition-transform duration-[220ms] ease-out group-hover:scale-[1.04]">
           <Cover track={track} className="h-12 w-12" />
-          <span className={`absolute inset-0 grid place-items-center rounded-xl bg-black/55 text-ink transition-opacity duration-[160ms] ${eq ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
+          <span className={`absolute inset-0 grid place-items-center rounded-xl bg-black/55 text-ink transition-opacity duration-[160ms] ${eq ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100"}`}>
             {eq ? <EqBars /> : <Play size={18} weight="fill" />}
           </span>
         </span>
