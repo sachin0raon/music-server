@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, PlayIcon as Play } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, PlayIcon as Play, QueueIcon as Queue } from "@phosphor-icons/react";
 import Cover from "./Cover";
 import { useCoverPalette } from "../palette";
 import TrackRow from "./TrackRow";
@@ -8,16 +8,33 @@ import TrackMenu from "./TrackMenu";
 import GlassPanel from "./GlassPanel";
 import { Button, IconButton } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
-import { useFetch, usePlayer, useTracks } from "../state";
+import { useFetch, usePlayer, useToast, useTracks } from "../state";
+import useSelection from "./useSelection";
 import { transition } from "../motion";
 
 // Used by Library (scope mine/shared) and Search (scope all + q)
 export default function TrackList({ scope, q, letter, empty, featured, onTotal, sort = "added_desc" }) {
   const { items, total, loading, error, busy, reload, loadMore } = useTracks(scope, q, sort, letter);
   const { data: newest } = useFetch(featured ? `/api/tracks?scope=${scope}&sort=added_desc&limit=1` : null);
-  const { playTrack, track: current, playing } = usePlayer();
+  const { playTrack, addToQueue, track: current, playing } = usePlayer();
+  const { showToast } = useToast();
+  const { selected, count, isSelected, toggle, clear } = useSelection(items);
   const [menu, setMenu] = useState(null);
   const reduce = useReducedMotion();
+
+  // A selection only means anything for the rows on screen, and every one of
+  // these changes which rows those are.
+  useEffect(() => { clear(); }, [scope, q, sort, letter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const queueSelected = () => {
+    const { added, skipped } = addToQueue(selected);
+    showToast(
+      added
+        ? `Added ${added} ${added === 1 ? "track" : "tracks"} to the queue${skipped ? `, ${skipped} already there` : ""}`
+        : "Already in the queue",
+    );
+    clear();
+  };
 
   // Let the parent show the scope's total (Library puts it under the header).
   // Only once loaded, so a count of 0 never flashes before the real number.
@@ -39,10 +56,15 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
         // The card is tinted from its own cover, so the list below reads as one piece with it
         <GlassPanel as={motion.section} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
           transition={transition.slow}
-          className="mb-4 flex gap-4 p-3.5 sm:gap-6 sm:p-6"
-          // The second layer restates .glass-flat, which the first would otherwise
-          // let the page show through. Keep the two in step.
-          style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, #191a1c, #111215)` }}>
+          className="mb-4 flex gap-4 bg-clip-padding p-3.5 sm:gap-6 sm:p-6"
+          // bg-clip-padding keeps the tint out from under the border. The border
+          // is translucent white, so a background that is strongly coloured at
+          // one corner and clear at the other shows through it and the edge
+          // reads brighter on one side than the other.
+          //
+          // The second layer restates .glass-flat, which this element's own
+          // background would otherwise replace. Keep the two in step.
+          style={{ background: `linear-gradient(115deg, color-mix(in srgb, ${tint} 45%, transparent), transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.045))` }}>
           <Cover track={latest} eager className="h-[122px] w-[122px] shadow-lift sm:h-[184px] sm:w-[184px]" rounded="rounded-2xl" />
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center sm:gap-8 sm:py-0">
             <div className="min-w-0">
@@ -58,6 +80,15 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
           </div>
         </GlassPanel>
       )}
+      {count > 0 && (
+        <div className="mb-3 flex items-center gap-3">
+          <p className="text-small text-mute" role="status">{count} selected</p>
+          <Button small variant="accent" onClick={queueSelected} className="ml-auto">
+            <Queue size={16} weight="bold" />Add to queue
+          </Button>
+          <Button small onClick={clear}>Clear</Button>
+        </div>
+      )}
       <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
         {items.map((t, i) => {
           const active = current?.id === t.id;
@@ -68,6 +99,9 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
               list={items}
               onMenu={setMenu}
               index={i}
+              selectable
+              selected={isSelected(t)}
+              onSelect={toggle}
               active={active}
               eq={active && playing}
               onPlay={playTrack}

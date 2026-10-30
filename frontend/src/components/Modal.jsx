@@ -83,17 +83,41 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
   return (
     <motion.div ref={root} role="dialog" aria-modal="true" aria-label={label || title || "Dialog"}
       className={`fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8dvh] sm:pt-[10dvh] ${fullScreen ? "" : "lg:pl-60"}`}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: reduce ? EXIT_REDUCED : EXIT }}
-      transition={reduce ? ENTER_REDUCED : ENTER}>
-      <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
+      exit={{ opacity: 0, transition: reduce ? EXIT_REDUCED : EXIT }}>
+      {/* The scrim fades on its own rather than on the root. Fading the root
+          multiplied with the card's own opacity, leaving the card around a
+          quarter opaque mid-open while the scrim had not darkened yet, so the
+          page read straight through the dialog body. */}
+      <motion.div aria-hidden="true" className="absolute inset-0 bg-black/60"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={reduce ? ENTER_REDUCED : ENTER} />
       <motion.div
-        className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl"
-        initial={{ opacity: 0, scale: reduce ? 1 : 0.92, y: reduce ? 0 : 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: reduce ? 1 : 0.93, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
+        // will-change rather than transform-gpu: motion writes transform
+        // inline and would override it. Without this the card is promoted only
+        // while it animates, so settling drops the layer and repaints it, and
+        // its border and corners flashed for that frame. The interior is
+        // covered by the header and body, which own their own layers.
+        className="glass-overlay relative flex max-h-[85dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl will-change-transform"
+        // Opaque from the first frame on the way in: any opacity below 1 shows
+        // whatever is behind the dialog.
+        //
+        // Offset only, never scale. Scaling forces the card's layer to be
+        // re-rasterized, and once the body below has enough rows to scroll it
+        // becomes its own composited layer, at which point the card's own tiles
+        // could arrive a frame late and the whole dialog flashed transparent on
+        // mobile. Translation moves an existing raster and cannot do that.
+        initial={{ y: reduce ? 0 : 16 }}
+        animate={{ y: 0 }}
+        exit={{ opacity: 0, y: reduce ? 0 : 10, transition: reduce ? EXIT_REDUCED : EXIT }}
         transition={reduce ? ENTER_REDUCED : ENTER}>
-        <div className="flex min-h-11 shrink-0 items-center gap-2 px-5 pt-3">
+        {/* Paints its own ground for the same reason the scroller below does:
+            with the body promoted to its own layer, the card's background can
+            arrive a frame late and anything relying on it flashes through. */}
+        {/* Its own compositing layer, painted once. Left in the card's layer it
+            was repainted every time the scrolling body below invalidated that
+            layer, and the frames where its tiles were not ready showed straight
+            through to whatever sits behind the dialog. */}
+        <div className="flex min-h-11 shrink-0 transform-gpu items-center gap-2 bg-surface-2 px-5 pt-3">
           {onBack && (
             <IconButton label="Back" size="sm" onClick={onBack} className="-ml-2 text-mute hover:text-ink">
               <CaretLeft size={20} weight="bold" />
@@ -107,7 +131,12 @@ export default function Modal({ label, title, onBack, actions, onClose, onEscape
             <X size={18} weight="bold" />
           </IconButton>
         </div>
-        <div ref={body} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none">
+        {/* Promoted from the first frame, like the header. Every compositor
+            layer this dialog needs exists before the card starts moving: a
+            layer created part way through, whether by a scroll container
+            appearing or by one being scrolled, costs a raster and the dialog
+            flashes for that frame. */}
+        <div ref={body} tabIndex={-1} className="min-h-0 flex-1 transform-gpu overflow-y-auto overscroll-contain bg-surface-2 px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-1 outline-none">
           {children}
         </div>
         {overlay && (

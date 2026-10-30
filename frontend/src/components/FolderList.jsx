@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue, XIcon as X } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
@@ -8,7 +8,7 @@ import ImportResults from "./ImportResults";
 import { Button, IconButton } from "./Button";
 import { Empty, ErrorBox, Skeleton } from "./States";
 import { api } from "../api";
-import { useData, usePlayer } from "../state";
+import { useData, usePlayer, useToast } from "../state";
 
 const PAGE = 50;
 // Tags this list's queue, so "Show more" can grow a folder that is already playing.
@@ -18,7 +18,8 @@ const SOURCE = { type: "folder" };
 // until the user imports, and the folder itself is never changed.
 export default function FolderList({ sort, q = "", letter = null, hideAdded = false, onToggleHideAdded, onClearSearch, onTotal, empty }) {
   const { bump, version } = useData();
-  const { extendQueue, patchTrack, playTrack, track: current, playing } = usePlayer();
+  const { extendQueue, patchTrack, playTrack, addToQueue, track: current, playing } = usePlayer();
+  const { showToast } = useToast();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,19 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
 
   const selectable = useMemo(() => items.filter((t) => !t.in_library), [items]);
   const allSelected = useMemo(() => selectable.length > 0 && selectable.every((t) => selected.has(t.id)), [selectable, selected]);
+
+  // Selection here is a Set of tokens, kept as it was rather than moved onto
+  // useSelection: it works, and churning it would only buy consistency.
+  const queueSelected = () => {
+    const picked = items.filter((t) => selected.has(t.id));
+    const { added, skipped } = addToQueue(picked);
+    showToast(
+      added
+        ? `Added ${added} ${added === 1 ? "track" : "tracks"} to the queue${skipped ? `, ${skipped} already there` : ""}`
+        : "Already in the queue",
+    );
+    setSelected(new Set());
+  };
 
   const importSelected = async () => {
     const tokens = [...selected];
@@ -178,11 +192,17 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
           under the bottom navigation on a phone, and the import action would be lost */}
       {selected.size > 0 && (
         <GlassPanel className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
+          {/* The count carries the number, so the buttons do not repeat it:
+              three labelled buttons plus a count wrapped onto two lines on a
+              phone. */}
           <p className="mr-auto whitespace-nowrap text-small text-mute">{selected.size} selected</p>
           <Button variant="accent" small onClick={importSelected} disabled={importing}>
-            {importing ? "Importing" : `Import ${selected.size === 1 ? "this song" : `${selected.size} songs`}`}
+            {importing ? "Importing" : "Import"}
           </Button>
-          <Button small onClick={() => setSelected(new Set())} disabled={importing}>Clear</Button>
+          <Button small onClick={queueSelected} disabled={importing}><Queue size={16} weight="bold" />Queue</Button>
+          <IconButton size="sm" label="Clear selection" onClick={() => setSelected(new Set())} disabled={importing}>
+            <X size={16} weight="bold" />
+          </IconButton>
         </GlassPanel>
       )}
 

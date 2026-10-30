@@ -20,6 +20,14 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# ffmpeg is what turns a downloaded stream into something this library accepts:
+# Opus arrives inside WebM, which the ingest rejects and mutagen cannot read, so
+# it is remuxed. It also writes the tags and artwork, and does the optional MP3
+# conversion. Installed before pip so the layer is cached across code changes.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 

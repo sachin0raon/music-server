@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CaretLeftIcon as CaretLeft, CheckIcon as Check, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
+import { CaretLeftIcon as CaretLeft, CheckIcon as Check, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
 import Modal from "./Modal";
 import TrackHeader from "./TrackHeader";
 import Field from "./Field";
@@ -8,7 +8,7 @@ import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import useFocusTrap from "./useFocusTrap";
 import { api } from "../api";
-import { useAuth, useData, useFetch, usePlayer } from "../state";
+import { useAuth, useData, useFetch, usePlayer, useToast } from "../state";
 import { transition, ease } from "../motion";
 
 const VIEW_ENTER = { duration: 0.14, delay: 0.03, ease: ease.smooth };
@@ -84,7 +84,15 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
   const [track, setTrack] = useState(initialTrack);
   useEffect(() => { setTrack(initialTrack); }, [initialTrack]);
   const { bump } = useData();
-  const { patchTrack, dropTrack } = usePlayer();
+  const { patchTrack, dropTrack, addToQueue } = usePlayer();
+  const { showToast } = useToast();
+
+  // Queue it where it will not disturb what is playing: at the end.
+  const queueTrack = () => {
+    const { added } = addToQueue(track);
+    showToast(added ? `Added "${track.title}" to the queue` : `"${track.title}" is already in the queue`);
+    onClose();
+  };
   const { user } = useAuth();
   const [view, setView] = useState("actions");
   const [editingDetails, setEditingDetails] = useState(false);
@@ -158,7 +166,6 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
   const editAction = view === "details" && canEdit && detailsReady && !editingDetails ? (
     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={transition.fast}>
       <IconButton
-        variant="glass"
         size="sm"
         onClick={() => setEditingDetails(true)}
         className="shrink-0 text-mute hover:text-ink"
@@ -215,6 +222,7 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
         {view === "actions" && (
           <motion.div key="actions" initial={{ opacity: 0, x: reduce ? 0 : -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : 8, transition: exit }} transition={enter}>
             <Item icon={Info} initialFocus onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
+            <Item icon={Queue} onClick={queueTrack}>Add to queue</Item>
             {!isFolder && (
               <>
                 <Item icon={ListPlus} onClick={() => setView("playlists")}>Add to playlist</Item>

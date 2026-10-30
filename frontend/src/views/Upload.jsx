@@ -4,6 +4,7 @@ import { CheckIcon as Check, UploadSimpleIcon as UploadSimple, WarningCircleIcon
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
 import LinkImport from "../components/LinkImport";
+import MediaLinkImport from "../components/MediaLinkImport";
 import FolderScan from "../components/FolderScan";
 import { Button } from "../components/Button";
 import { uploadFile } from "../api";
@@ -56,6 +57,7 @@ export default function Upload() {
       </GlassPanel>
 
       <LinkImport />
+      <MediaLinkImport />
       <FolderScan />
 
       {files.length > 0 && (

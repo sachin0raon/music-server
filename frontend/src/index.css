@@ -91,16 +91,15 @@ body {
 
 @layer components {
 /* ---------- Surface levels ----------
-   Every level is opaque: nothing of what sits behind reads through, so none of
-   them carries a backdrop-filter either. Separation comes from the step in
-   lightness and the shadow, not from translucency.
-     flat:    lists, cards, forms (used everywhere)
-     raised:  toasts and other floating chrome
-     overlay: modal layers
-     bar:     player bar and tab bar */
+   Anything that covers content is opaque, so none of it reads through and none
+   of it needs a backdrop-filter. Panels that merely sit on the page keep a
+   translucent wash, so the ambient glow behind them still shows.
+     flat:    lists, cards, forms, tabs - translucent, on the page
+     raised:  toasts and other floating chrome - opaque, over content
+     overlay: modal layers - opaque, over content
+     bar:     player bar and tab bar - opaque, over content */
 .glass, .glass-flat {
-  /* The former white-on-ground wash, resolved to the colours it produced. */
-  background: linear-gradient(180deg, #191a1c, #111215);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.045));
   border: 1px solid var(--color-line-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--shadow-rest);
 }
