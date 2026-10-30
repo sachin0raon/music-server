@@ -23,7 +23,9 @@ export default function QueueSheet({ onClose, fullScreen = false }) {
               <button onClick={() => { jumpTo(i); onClose(); }} aria-current={current ? "true" : undefined}
                 data-autofocus={current ? "" : undefined}
                 aria-label={`Play ${t.title} by ${t.artist}`}
-                className={`interactive flex min-h-[56px] w-full items-center gap-3 rounded-tile px-2 py-1 text-left ${current ? "bg-accent-soft" : ""}`}>
+                /* .interactive:hover outranks bg-accent-soft, so without a hover of
+                   its own the playing row lost its tint under the pointer. */
+                className={`interactive flex min-h-[56px] w-full items-center gap-3 rounded-tile px-2 py-1 text-left ${current ? "bg-accent-soft hover:bg-accent/20" : ""}`}>
                 <span className="tnum w-6 shrink-0 text-right text-small text-mute">{i + 1}</span>
                 <span className="relative shrink-0">
                   <Cover track={t} className="h-10 w-10" />

@@ -60,7 +60,10 @@ function Shell() {
         </div>
         <nav aria-label="Sidebar" className="flex flex-col gap-1">
           {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => `relative flex min-h-11 items-center gap-3 rounded-full px-3 text-body transition-colors duration-[160ms] hover:bg-white/[0.06] hover:text-ink ${isActive ? "bg-white/10 font-medium text-ink" : "text-mute"}`}>
+            <NavLink key={to} to={to} end={end} // Hover belongs to each state separately. Shared, it applied to the
+              // selected item too, and :hover outranks a plain class, so hovering
+              // the current page dimmed it from 10% to 6% -- it looked deselected.
+              className={({ isActive }) => `relative flex min-h-11 items-center gap-3 rounded-full px-3 text-body transition-colors duration-[160ms] ${isActive ? "bg-white/10 font-medium text-ink hover:bg-white/[0.14]" : "text-mute hover:bg-white/[0.06] hover:text-ink"}`}>
               {({ isActive }) => <>
                 {isActive && <motion.span layoutId="sidebar-active" aria-hidden="true" className="absolute -left-2 h-5 w-[3px] rounded-full bg-accent" transition={transition.pill} />}
                 <Icon size={22} weight={isActive ? "fill" : "regular"} className={isActive ? "text-accent" : ""} />{label}
