@@ -740,21 +740,42 @@ export function PlayerProvider({ children }) {
       setMuted(true);
     }
   }, [muted, volume]);
-  const dropTrack = useCallback((id) => {
-    const q = qRef.current, ix = iRef.current, i = q.findIndex((t) => t.id === id);
-    if (i < 0) return;
-    if (origOrder.current) origOrder.current = origOrder.current.filter((x) => x !== id);
-    const nq = q.filter((t) => t.id !== id);
+  // Takes a set rather than one id because the refs it reads are only refreshed
+  // on render: calling a single-track version in a loop would have every call
+  // work from the same stale queue, and all but the last removal would be lost.
+  //
+  // The new index is found by following the track itself rather than adjusting
+  // the old one by a count, which is what makes it safe to remove entries from
+  // before, at and after the current position in one go.
+  const dropTracks = useCallback((ids) => {
+    const gone = new Set(ids);
+    const q = qRef.current, ix = iRef.current;
+    if (!q.some((t) => gone.has(t.id))) return;
+    if (origOrder.current) origOrder.current = origOrder.current.filter((x) => !gone.has(x));
+    const nq = q.filter((t) => !gone.has(t.id));
+    const playing = q[ix];
+    let next;
+    if (playing && !gone.has(playing.id)) {
+      next = nq.findIndex((t) => t.id === playing.id);
+    } else {
+      // What was playing has gone: the next survivor takes its place. With none
+      // left after it, playback stops and whatever remains is left for the
+      // floating play button to offer.
+      const after = q.slice(ix + 1).find((t) => !gone.has(t.id));
+      next = after ? nq.findIndex((t) => t.id === after.id) : -1;
+    }
     setQueue(nq);
-    setIndex(i < ix ? ix - 1 : i === ix && ix >= nq.length ? -1 : ix);
+    setIndex(next);
   }, []);
+
+  const dropTrack = useCallback((id) => dropTracks([id]), [dropTracks]);
 
   // Repeat counts as "there is a next" because it wraps back to the top.
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
-    track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
+    track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, dropTracks, jumpTo,
     shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, addToQueue, volume, muted, setVolume, toggleMute,
-  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, jumpTo,
+  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, dropTracks, jumpTo,
        shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, addToQueue, volume, muted, setVolume, toggleMute]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
