@@ -19,7 +19,7 @@ export default function ImportResults({ items, limit = 200 }) {
             )}
           </div>
           <p className={`mt-0.5 text-small ${r.status === "error" ? "text-danger" : "text-mute"}`}>
-            {r.status === "ok" ? LABEL.ok : (r.detail || LABEL[r.status])}
+            {r.status === "ok" ? (r.detail || LABEL.ok) : (r.detail || LABEL[r.status])}
           </p>
         </li>
       ))}

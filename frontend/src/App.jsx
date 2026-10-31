@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { PlaylistIcon as Playlist, MagnifyingGlassIcon as MagnifyingGlass, MusicNotesIcon as MusicNotes, UserCircleIcon as UserCircle, WarningCircleIcon as WarningCircle, XIcon as X } from "@phosphor-icons/react";
+import { PlaylistIcon as Playlist, MagnifyingGlassIcon as MagnifyingGlass, MusicNotesIcon as MusicNotes, FilmSlateIcon as FilmSlate, UserCircleIcon as UserCircle, WarningCircleIcon as WarningCircle, XIcon as X } from "@phosphor-icons/react";
 import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, usePlayer, useToast } from "./state";
 import Ambient from "./components/Ambient";
 import PlayerBar from "./components/PlayerBar";
@@ -15,6 +15,7 @@ const Library = lazy(() => import("./views/Library"));
 const Search = lazy(() => import("./views/Search"));
 const Upload = lazy(() => import("./views/Upload"));
 const Account = lazy(() => import("./views/Account"));
+const Videos = lazy(() => import("./views/Videos"));
 const PlaylistsIndex = lazy(() => import("./views/Playlists").then((m) => ({ default: m.PlaylistsIndex })));
 const PlaylistDetail = lazy(() => import("./views/Playlists").then((m) => ({ default: m.PlaylistDetail })));
 const NowPlaying = lazy(() => import("./components/NowPlaying"));
@@ -23,6 +24,7 @@ const NAV = [
   { to: "/", label: "Library", icon: MusicNotes, end: true },
   { to: "/search", label: "Search", icon: MagnifyingGlass },
   { to: "/playlists", label: "Playlists", icon: Playlist },
+  { to: "/videos", label: "Videos", icon: FilmSlate },
   { to: "/account", label: "Account", icon: UserCircle },
 ];
 
@@ -87,6 +89,7 @@ function Shell() {
                   <Route path="/search" element={<Page><Search /></Page>} />
                   <Route path="/playlists" element={<Page><PlaylistsIndex /></Page>} />
                   <Route path="/playlists/:id" element={<Page><PlaylistDetailKeyed /></Page>} />
+                  <Route path="/videos" element={<Page><Videos /></Page>} />
                   <Route path="/upload" element={<Page><Upload /></Page>} />
                   <Route path="/account" element={<Page><Account /></Page>} />
                   <Route path="*" element={<Page><Library /></Page>} />

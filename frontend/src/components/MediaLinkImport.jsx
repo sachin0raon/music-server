@@ -21,6 +21,15 @@ const LABEL = {
 
 const size = (bytes) => (bytes ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : "");
 
+// Resolution first: it is what people choose by. The size is deliberately
+// marked approximate -- a video-only stream has its audio merged in afterwards,
+// so the real download is larger than the number the site reports.
+function videoLabel(f) {
+  const parts = [f.height ? `${f.height}p` : f.note, f.fps && f.fps > 30 ? `${f.fps}fps` : "", f.codec];
+  if (f.size) parts.push(`~${size(f.size)}`);
+  return parts.filter(Boolean).join(" · ");
+}
+
 // Describes a stream the site actually serves, so the numbers are real rather
 // than a target we would transcode to.
 function formatLabel(f) {
@@ -109,7 +118,8 @@ export default function MediaLinkImport() {
     try {
       const d = await api.post("/api/media/probe-link", { url: value, use_cookies: useCookies });
       setItem(d);
-      setChoice(d.formats[0] ? `src:${d.formats[0].id}` : "");
+      setChoice(d.formats[0] ? `src:${d.formats[0].id}`
+        : d.video_formats?.[0] ? `vid:${d.video_formats[0].id}` : "");
     } catch (ex) {
       setErr(ex.message);
     } finally {
@@ -126,7 +136,9 @@ export default function MediaLinkImport() {
       // converts from the best one on offer.
       const body = kind === "mp3"
         ? { url: url.trim(), format_id: item.formats[0].id, convert: "mp3", bitrate: +value }
-        : { url: url.trim(), format_id: value };
+        : kind === "vid"
+          ? { url: url.trim(), format_id: value, kind: "video" }
+          : { url: url.trim(), format_id: value };
       body.use_cookies = useCookies;
       setJob(await api.post("/api/media/fetch", body));
     } catch (ex) {
@@ -195,7 +207,7 @@ export default function MediaLinkImport() {
           </div>
 
           <fieldset className="mt-4">
-            <legend className="text-small text-mute">Audio to download</legend>
+            <legend className="text-small text-mute">What to download</legend>
             {/* Only shown when the page has no audio-only stream: these carry a
                 picture that gets discarded, so the download is larger than the
                 track. Worth saying rather than quietly spending the bandwidth. */}
@@ -218,9 +230,12 @@ export default function MediaLinkImport() {
 
               {/* In the same group because it is the same decision: what ends up
                   in the library. These are not streams the site offers, so they
-                  are converted from the best one that it does. */}
-              <p className="pt-2 text-micro text-mute">Converted from the best stream</p>
-              {MP3_BITRATES.map((b) => (
+                  are converted from the best one that it does -- so they are
+                  offered only when there is one. */}
+              {item.formats.length > 0 && (
+                <p className="pt-2 text-micro text-mute">Converted from the best stream</p>
+              )}
+              {item.formats.length > 0 && MP3_BITRATES.map((b) => (
                 <label key={b} className="interactive flex cursor-pointer items-center gap-3 rounded-tile px-2 py-2">
                   <input type="radio" name="media-format" value={`mp3:${b}`}
                     checked={choice === `mp3:${b}`} onChange={() => setChoice(`mp3:${b}`)}
@@ -229,6 +244,26 @@ export default function MediaLinkImport() {
                   <span className="shrink-0 text-micro text-mute">mp3</span>
                 </label>
               ))}
+
+              {/* Same list, because it is the same decision -- what to keep.
+                  Where it lands differs, so the heading says so. */}
+              {item.video_formats?.length > 0 && (
+                <>
+                  <p className="pt-3 text-micro text-mute">
+                    Keep the video instead. Goes to your Videos page: private, and not playable here.
+                    Sizes are approximate &mdash; the audio track is merged in afterwards.
+                  </p>
+                  {item.video_formats.map((f) => (
+                    <label key={`v${f.id}`} className="interactive flex cursor-pointer items-center gap-3 rounded-tile px-2 py-2">
+                      <input type="radio" name="media-format" value={`vid:${f.id}`}
+                        checked={choice === `vid:${f.id}`} onChange={() => setChoice(`vid:${f.id}`)}
+                        className="accent-accent" />
+                      <span className="min-w-0 flex-1 truncate text-small">{videoLabel(f)}</span>
+                      <span className="shrink-0 text-micro text-mute">{f.ext}</span>
+                    </label>
+                  ))}
+                </>
+              )}
             </div>
           </fieldset>
 

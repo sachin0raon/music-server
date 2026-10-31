@@ -22,6 +22,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     tracks: Mapped[list["Track"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    videos: Mapped[list["Video"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Session(Base):
@@ -94,3 +95,48 @@ class PlaylistTrack(Base):
     # Deleting a track removes it from every playlist (DB-level cascade)
     track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), nullable=False, index=True)
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class Video(Base):
+    """A downloaded video. Deliberately not a Track.
+
+    Sharing, playlists and the play queue all key off `tracks`, so keeping
+    videos in their own table makes those unreachable rather than merely
+    filtered out -- there is no `is_shared` column here to set, and no foreign
+    key pointing at this table. A video is private to its owner by construction
+    rather than by remembering to add a WHERE clause in every new query.
+    """
+
+    __tablename__ = "videos"
+    __table_args__ = (
+        # The same link at the same quality is the realistic duplicate. Hashed
+        # because the URL is far too long to index: utf8mb4 is 4 bytes per
+        # character against InnoDB's 3072-byte key limit.
+        UniqueConstraint("owner_id", "source_hash", name="uq_video_owner_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Relative to the data dir, like Track.file_path. Never sent to clients.
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    uploader: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # What the merge actually produced, read from the file rather than assumed:
+    # a request for mp4 lands as mkv whenever the codecs cannot be remuxed.
+    container: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    format_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    thumb_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    owner: Mapped[User] = relationship(back_populates="videos")

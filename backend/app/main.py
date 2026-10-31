@@ -15,6 +15,7 @@ from .models import Base
 from .playlists import router as playlists_router
 from .schema import ensure_columns
 from .tracks import router as tracks_router
+from .videos import router as videos_router
 
 # uvicorn configures its own loggers and leaves the root one alone, so without
 # this the app's own messages below WARNING go nowhere. uvicorn's loggers do not
@@ -54,6 +55,7 @@ app.include_router(tracks_router)
 app.include_router(playlists_router)
 app.include_router(library_router)
 app.include_router(medialink_router)
+app.include_router(videos_router)
 
 
 @app.on_event("startup")

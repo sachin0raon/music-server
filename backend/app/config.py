@@ -37,6 +37,11 @@ class Settings:
     # WARNING and drops every INFO line the app writes.
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
+    # Free space this server refuses to spend, in MB. Videos are large enough to
+    # fill a volume that MySQL is also living on, and a full disk takes the
+    # database down long before it inconveniences a download.
+    disk_reserve_mb: int = int(os.getenv("DISK_RESERVE_MB", "500"))
+
     # Sessions
     secret_key: str = _required("SECRET_KEY")
     session_days: int = int(os.getenv("SESSION_DAYS", "30"))

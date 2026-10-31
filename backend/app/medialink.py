@@ -11,6 +11,7 @@ re-encoding to MP3 by default -- makes a bigger file out of a lossy source and
 sounds slightly worse for it, so conversion is offered rather than assumed.
 """
 
+import hashlib
 import logging
 import secrets
 import shutil
@@ -25,12 +26,15 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session as DbSession
 
 from . import cookiestore
 from .auth import current_user
 from .config import settings
-from .db import SessionLocal
-from .models import User
+from .db import SessionLocal, get_db
+from .models import User, Video
+from .videos import store_video, video_out
 from .ratelimit import RateLimiter
 from .tracks import ALLOWED_EXT, FileUpload, _process, _result
 
@@ -52,6 +56,12 @@ _link_limiter = RateLimiter(limit=30, window_seconds=3600)
 # is also streaming audio to whoever is listening.
 MAX_CONCURRENT = 2
 _pool = ThreadPoolExecutor(max_workers=MAX_CONCURRENT, thread_name_prefix="medialink")
+
+# Its own worker, and only one. A multi-gigabyte download holds a slot for a
+# long time, and on the shared pool two of them would block every audio import
+# behind them. One at a time also keeps concurrent ffmpeg merges off a machine
+# that is streaming audio to whoever is listening.
+_video_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="videolink")
 
 JOB_TTL_SECONDS = 30 * 60  # how long a finished job stays readable
 PROBE_TIMEOUT_SECONDS = 30
@@ -222,6 +232,39 @@ def _muxed_formats(info: dict) -> list[dict]:
     return out
 
 
+def _video_entry(f: dict) -> dict:
+    height, width = f.get("height"), f.get("width")
+    return {
+        "id": f.get("format_id"),
+        "ext": f.get("ext"),
+        "codec": (f.get("vcodec") or "").split(".")[0],
+        "width": width,
+        "height": height,
+        "fps": round(f["fps"]) if f.get("fps") else None,
+        "size": f.get("filesize") or f.get("filesize_approx"),
+        "note": f.get("format_note") or (f"{height}p" if height else ""),
+        # Decides whether a second stream has to be merged in. Computed here,
+        # from the probe, so the request never gets to say.
+        "has_audio": bool(f.get("acodec") and f.get("acodec") != "none"),
+    }
+
+
+def _video_formats(info: dict) -> list[dict]:
+    """Streams carrying a picture, best first.
+
+    Includes video-only streams: on most large sites those are the only way to
+    get above 720p, and the audio is merged back in at download time.
+    """
+    out = []
+    for f in _formats_of(info):
+        has_picture = f.get("height") or f.get("width") or (f.get("vcodec") not in (None, "none"))
+        if not has_picture:
+            continue
+        out.append(_video_entry(f))
+    out.sort(key=lambda f: (-(f["height"] or 0), -(f["fps"] or 0), f["size"] or 0))
+    return out
+
+
 def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     from yt_dlp import YoutubeDL
     from yt_dlp.utils import DownloadError
@@ -252,10 +295,16 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     if info.get("_type") == "playlist":
         # noplaylist should have prevented this; a bare playlist URL still reaches it.
         raise LinkError("That link is a playlist. Paste a link to a single track.")
+    # A live stream has no end, so it downloads until something stops it or the
+    # disk is full, and its size cannot be estimated. Both disk guards are blind
+    # to it, which makes refusing it here the only place that works.
+    if info.get("is_live"):
+        raise LinkError("That is a live stream. Wait until it has finished and try again.")
 
     formats = _audio_formats(info) or _muxed_formats(info)
-    if not formats:
-        raise LinkError("That link has no audio this app can download.")
+    videos = _video_formats(info)
+    if not formats and not videos:
+        raise LinkError("That link has nothing this app can download.")
 
     return {
         "title": info.get("title") or "",
@@ -263,6 +312,7 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
         "duration": info.get("duration"),
         "thumbnail": info.get("thumbnail"),
         "formats": formats,
+        "video_formats": videos,
     }
 
 
@@ -273,6 +323,7 @@ class Job:
     id: str
     owner_id: int
     title: str
+    kind: str = "audio"  # audio | video -- says which page the result belongs to
     state: str = "queued"  # queued | downloading | converting | importing | done | error
     percent: float = 0.0
     result: dict | None = None
@@ -289,6 +340,7 @@ class Job:
         with self._lock:
             return {
                 "id": self.id,
+                "kind": self.kind,
                 "state": self.state,
                 "percent": round(self.percent, 1),
                 "title": self.title,
@@ -409,11 +461,160 @@ def _download(job: Job, user_id: int, url: str, format_id: str, convert: str | N
     return audio[0]
 
 
+# ---------- video ----------
+
+DISK_CHECK_SECONDS = 2  # a statvfs per progress callback would be per-chunk
+
+
+def _free_bytes() -> int:
+    return shutil.disk_usage(settings.data_dir).free
+
+
+def _reserve_bytes() -> int:
+    return settings.disk_reserve_mb * 1024 * 1024
+
+
+def source_hash(url: str, format_id: str) -> str:
+    """Identifies "this link at this quality", which is how a duplicate happens."""
+    return hashlib.sha256(f"{url}\n{format_id}".encode()).hexdigest()
+
+
+def check_disk(estimated: int | None) -> None:
+    """Refuse before starting if finishing would eat into the reserve.
+
+    The estimate understates a video, because the audio merged in afterwards is
+    a second stream the format never counted. The mid-download check is what
+    actually holds the line; this one just avoids starting the obviously
+    hopeless.
+    """
+    free = _free_bytes()
+    if free - (estimated or 0) < _reserve_bytes():
+        mb = lambda n: f"{n // (1024 * 1024)} MB"  # noqa: E731 -- local shorthand
+        need = f"needs about {mb(estimated)}" if estimated else "is too large"
+        raise LinkError(
+            f"Not enough disk space: this download {need}, {mb(free)} is free, "
+            f"and {settings.disk_reserve_mb} MB is kept in reserve.")
+
+
+def _video_selector(fmt: dict) -> str:
+    """What to ask yt-dlp for, derived from the probe rather than the request.
+
+    A video-only stream needs the best audio merged in or the file is silent.
+    Appending it unconditionally would instead bolt a second audio track onto a
+    stream that already had one, so the probe's own acodec decides.
+    """
+    fid = fmt["id"]
+    return fid if fmt.get("has_audio") else f"{fid}+bestaudio/{fid}"
+
+
+def _download_video(job: Job, user_id: int, url: str, fmt: dict, use_cookies: bool) -> tuple[Path, Path | None]:
+    from yt_dlp import YoutubeDL
+    from yt_dlp.utils import DownloadError
+
+    work = settings.data_dir / "tmp" / f"ytdlp-{secrets.token_hex(8)}"
+    work.mkdir(parents=True, exist_ok=True)
+    last_check = [0.0]
+
+    def hook(d: dict) -> None:
+        if d.get("status") == "downloading":
+            now = time.monotonic()
+            if now - last_check[0] > DISK_CHECK_SECONDS:
+                last_check[0] = now
+                # The estimate was only ever a guess; this is the measurement.
+                if _free_bytes() < _reserve_bytes():
+                    raise LinkError("Ran out of disk space, so the download was stopped.")
+            total = d.get("total_bytes") or d.get("total_bytes_estimate")
+            got = d.get("downloaded_bytes") or 0
+            if total:
+                job.set(state="downloading", percent=min(99.0, got / total * 100))
+        elif d.get("status") == "finished":
+            # Merging reports no bytes, so the bar stops and the label carries it.
+            job.set(state="converting", percent=100.0)
+
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "format": _video_selector(fmt),
+        # A request, not a guarantee: yt-dlp falls back to mkv when the codecs
+        # cannot be remuxed into mp4, which is why the container is read back
+        # off the file rather than assumed here.
+        "merge_output_format": "mp4",
+        "outtmpl": str(work / "%(id)s.%(ext)s"),
+        "progress_hooks": [hook],
+        "writethumbnail": True,
+        # Converted but deliberately not embedded: the Videos page wants a file
+        # it can serve, not a picture buried in the container.
+        "postprocessors": [{"key": "FFmpegThumbnailsConvertor", "format": "jpg"}],
+        "socket_timeout": PROBE_TIMEOUT_SECONDS,
+    }
+
+    try:
+        with _cookie_opts(user_id, use_cookies) as cookie_opts:
+            log.info("Downloading video %s format %s (cookies: %s)", url, fmt["id"],
+                     "yes" if cookie_opts else "no")
+            with YoutubeDL({**opts, **cookie_opts}) as ydl:
+                ydl.download([url])
+    except LinkError:
+        shutil.rmtree(work, ignore_errors=True)
+        raise  # already carries a message meant for the user
+    except DownloadError as exc:
+        log.warning("Video download failed for %s: %s", url, exc)
+        shutil.rmtree(work, ignore_errors=True)
+        raise LinkError(_explain(exc)) from exc
+    except Exception as exc:
+        log.warning("Video download failed for %s: %s", url, exc)
+        shutil.rmtree(work, ignore_errors=True)
+        raise LinkError(_explain(exc)) from exc
+
+    files = [p for p in work.iterdir() if p.is_file()]
+    thumb = next((p for p in files if p.suffix.lower() == ".jpg"), None)
+    # The video is whatever is left and largest: the merge output's extension
+    # depends on what the codecs allowed.
+    rest = [p for p in files if p is not thumb]
+    if not rest:
+        shutil.rmtree(work, ignore_errors=True)
+        raise LinkError("The download produced no video file.")
+    return max(rest, key=lambda p: p.stat().st_size), thumb
+
+
 def _safe_name(title: str, uploader: str, ext: str) -> str:
     """A readable filename. Only a fallback: the file carries real tags by now."""
     base = " - ".join(p for p in (title.strip(), uploader.strip()) if p) or "track"
     cleaned = "".join(c for c in base if c.isalnum() or c in " -_()[]").strip()
     return f"{(cleaned or 'track')[:200]}{ext}"
+
+
+def _run_video_job(job: Job, user_id: int, url: str, item: dict, fmt: dict, use_cookies: bool) -> None:
+    work = None
+    try:
+        path, thumb = _download_video(job, user_id, url, fmt, use_cookies)
+        work = path.parent
+        job.set(state="importing")
+        # Opened here rather than before: holding a connection across a download
+        # that runs for minutes wastes one and risks a timeout.
+        with SessionLocal() as db:
+            user = db.get(User, user_id)
+            if user is None:
+                raise LinkError("Your account is no longer available.")
+            video = store_video(db, user, url, item, fmt, path, thumb,
+                                source_hash(url, str(fmt.get("id"))))
+            # "filename" rather than "name": ImportResults renders both the
+            # audio and video outcomes, and keys off that.
+            result = {"filename": video.title, "status": "ok", "detail": "Saved to Videos",
+                      "kind": "video", "video": video_out(video)}
+        job.set(state="done", percent=100.0, result=result, finished_at=time.monotonic())
+    except LinkError as exc:
+        job.set(state="error", error=str(exc), finished_at=time.monotonic(),
+                result=_result(job.title or "video", "error", str(exc)))
+    except Exception:
+        log.exception("Video job failed for %s", url)
+        job.set(state="error", error="Something went wrong during the download.",
+                finished_at=time.monotonic(),
+                result=_result(job.title or "video", "error", "Something went wrong during the download."))
+    finally:
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def _run_job(job: Job, user_id: int, url: str, item: dict, format_id: str,
@@ -461,6 +662,9 @@ class FetchBody(BaseModel):
     convert: str | None = Field(default=None, pattern="^mp3$")
     bitrate: int | None = None
     use_cookies: bool = False
+    # Which library the result belongs in. Defaults to audio so every existing
+    # caller keeps working unchanged.
+    kind: str = Field(default="audio", pattern="^(audio|video)$")
 
 
 class CookieBody(BaseModel):
@@ -492,7 +696,8 @@ def probe_link(body: ProbeBody, user: User = Depends(current_user)):
 
 
 @router.post("/fetch")
-def from_media_link(body: FetchBody, user: User = Depends(current_user)):
+def from_media_link(body: FetchBody, user: User = Depends(current_user),
+                    db: DbSession = Depends(get_db)):
     """Start a download. Returns at once; poll the job for the rest."""
     _require_cookies(user.id, body.use_cookies)
     _link_limiter.check(f"link:{user.id}")
@@ -507,6 +712,9 @@ def from_media_link(body: FetchBody, user: User = Depends(current_user)):
         item = _cached_probe(body.url.strip(), user.id, body.use_cookies)
     except LinkError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if body.kind == "video":
+        return _start_video(body, item, user, db)
+
     if not any(f["id"] == body.format_id for f in item["formats"]):
         raise HTTPException(status_code=400, detail="That format is no longer available")
 
@@ -514,6 +722,29 @@ def from_media_link(body: FetchBody, user: User = Depends(current_user)):
     _put_job(job)
     _pool.submit(_run_job, job, user.id, body.url.strip(), item,
                  body.format_id, body.convert, body.bitrate, body.use_cookies)
+    return job.snapshot()
+
+
+def _start_video(body: "FetchBody", item: dict, user: User, db: DbSession) -> dict:
+    url = body.url.strip()
+    fmt = next((f for f in item.get("video_formats", []) if f["id"] == body.format_id), None)
+    if fmt is None:
+        raise HTTPException(status_code=400, detail="That format is no longer available")
+
+    # Checked before the bandwidth is spent. The unique constraint is still the
+    # backstop for two requests racing each other.
+    digest = source_hash(url, body.format_id)
+    if db.scalar(select(Video.id).where(Video.owner_id == user.id, Video.source_hash == digest)):
+        raise HTTPException(status_code=409, detail="You already downloaded this video at this quality.")
+
+    try:
+        check_disk(fmt.get("size"))
+    except LinkError as exc:
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+
+    job = Job(id=uuid.uuid4().hex, owner_id=user.id, title=item["title"], kind="video")
+    _put_job(job)
+    _video_pool.submit(_run_video_job, job, user.id, url, item, fmt, body.use_cookies)
     return job.snapshot()
 
 
