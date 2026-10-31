@@ -7,10 +7,31 @@ import LinkImport from "../components/LinkImport";
 import MediaLinkImport from "../components/MediaLinkImport";
 import FolderScan from "../components/FolderScan";
 import { Button } from "../components/Button";
-import { uploadFile } from "../api";
+import { api, fmtSize, uploadFile } from "../api";
 import { useData } from "../state";
 
 const LABEL = { queued: "Waiting", uploading: "Uploading", ok: "Added", duplicate: "Already in your library", error: "Failed" };
+
+// Free space, asked for in the brief form so rendering one number never costs
+// a walk of the whole data directory.
+function FreeSpace() {
+  const [vol, setVol] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get("/api/storage?brief=true")
+      .then((d) => { if (live) setVol(d.volume); })
+      .catch(() => { /* a missing figure is not worth an error here */ });
+    return () => { live = false; };
+  }, []);
+  if (!vol) return null;
+  const low = vol.free < vol.reserve;
+  return (
+    <p className={`mt-2 text-small ${low ? "text-danger" : "text-mute"}`} role="status">
+      {fmtSize(vol.free)} free of {fmtSize(vol.total)} on the server
+      {low ? " — below the reserve, so uploads and downloads may be refused." : ""}
+    </p>
+  );
+}
 
 export default function Upload() {
   const { bump } = useData();
@@ -52,6 +73,7 @@ export default function Upload() {
         <p className="mt-4 text-heading font-semibold">Add music to your library</p>
         <p className="mt-1 max-w-[52ch] text-body text-mute">Drop files here or choose them. mp3, flac, m4a, ogg, opus and wav. Uploads are private until you share them.</p>
         <Button variant="accent" className="mt-5" onClick={() => input.current.click()}>Choose files</Button>
+        <FreeSpace />
         <input ref={input} type="file" multiple accept=".mp3,.flac,.m4a,.ogg,.opus,.wav,audio/*" className="hidden"
           onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </GlassPanel>

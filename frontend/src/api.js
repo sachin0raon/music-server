@@ -73,9 +73,14 @@ export const fmt = (s) => {
 
 // ---- people-friendly metadata formatting (used by TrackDetails and the player) ----
 
+// Track sizes are megabytes; a disk is terabytes. One formatter rather than a
+// per-page copy, so "1.2 GB" never renders as "1234.5 MB" somewhere else.
 export const fmtSize = (bytes) => {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return null;
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const TB = 1024 ** 4, GB = 1024 ** 3, MB = 1024 * 1024;
+  if (bytes >= TB) return `${(bytes / TB).toFixed(1)} TB`;
+  if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
+  if (bytes >= MB) return `${(bytes / MB).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 };
 

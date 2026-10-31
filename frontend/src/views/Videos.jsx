@@ -5,14 +5,8 @@ import GlassPanel from "../components/GlassPanel";
 import Modal from "../components/Modal";
 import { Button, IconButton } from "../components/Button";
 import { Skeleton, ErrorBox, Empty } from "../components/States";
-import { api, fmt } from "../api";
+import { api, fmt, fmtSize as size } from "../api";
 import { useFetch, useToast } from "../state";
-
-const size = (bytes) => {
-  if (!bytes) return "";
-  const mb = bytes / 1024 / 1024;
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
-};
 
 // Resolution reads better than raw pixels, and the height is what people name.
 const quality = (v) => (v.height ? `${v.height}p` : "");
