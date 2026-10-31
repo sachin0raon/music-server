@@ -93,14 +93,18 @@ def _collect(tracks: list[int], folders: list[str], user: User, db: DbSession):
     if folders:
         # Deferred: library imports download_name from this module, so a
         # top-level import here would close the circle.
-        from .library import _path_for
+        from .library import _path_for, folder_tags
 
         for token in dict.fromkeys(folders):
             path = _path_for(token)
             if path is None or not path.is_file():
                 skipped.append("a folder file (no longer available)")
                 continue
-            entries.append((path, _unique(download_name(None, None, path.suffix.lower(),
+            # Named from its tags like everything else, so the same file does
+            # not come out differently depending on whether it arrived alone or
+            # in an archive. Untagged files fall back to the name on disk.
+            title, artist = folder_tags(token)
+            entries.append((path, _unique(download_name(title, artist, path.suffix.lower(),
                                                         path.name), taken)))
 
     return entries, skipped
