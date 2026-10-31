@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { HardDrivesIcon as HardDrives, ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
-import { Button, IconButton } from "./Button";
+import { IconButton } from "./Button";
 import { Skeleton, ErrorBox } from "./States";
 import { api, fmtSize } from "../api";
 import { useAuth } from "../state";
@@ -35,7 +35,7 @@ function Row({ label, bytes, note }) {
 
 // Fetched only when opened. An admin glancing at free space should not pay for
 // a query, and other people's figures should not be on screen unasked.
-function PerUser() {
+function PerUser({ refreshToken }) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState({ loading: false, error: null, data: null });
 
@@ -53,6 +53,19 @@ function PerUser() {
     setOpen(next);
     if (next && !state.data && !state.loading) load();
   };
+
+  // The panel above was just rechecked, so these figures are now the older
+  // ones. Left alone they would sit under their own, earlier timestamp next to
+  // fresh numbers -- visibly disagreeing with the thing they belong to.
+  const seen = useRef(refreshToken);
+  useEffect(() => {
+    if (seen.current === refreshToken) return;
+    seen.current = refreshToken;
+    // Closed: drop what was fetched so reopening asks again rather than
+    // showing pre-refresh numbers.
+    if (open) load(true);
+    else setState({ loading: false, error: null, data: null });
+  }, [refreshToken, open, load]);
 
   return (
     <div className="mt-4 border-t border-line pt-3">
@@ -87,6 +100,8 @@ function PerUser() {
 export default function StorageSettings() {
   const { user } = useAuth();
   const [state, setState] = useState({ loading: true, error: null, data: null });
+  // Bumped by Refresh, so an open per-user section recomputes with the panel.
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const load = useCallback(async (refresh = false) => {
     setState((p) => ({ ...p, loading: !p.data, error: null }));
@@ -113,7 +128,8 @@ export default function StorageSettings() {
         <h2 className="flex flex-1 items-center gap-2 text-heading font-semibold">
           <HardDrives size={20} weight="bold" className="text-mute" />Storage
         </h2>
-        <IconButton size="sm" label="Recheck storage" onClick={() => load(true)} disabled={loading}
+        <IconButton size="sm" label="Recheck storage"
+          onClick={() => { setRefreshToken((n) => n + 1); load(true); }} disabled={loading}
           className="text-mute hover:text-ink">
           <ArrowsClockwise size={18} weight="bold" />
         </IconButton>
@@ -153,7 +169,7 @@ export default function StorageSettings() {
                 </>
               )}
 
-              {user.is_admin && <PerUser />}
+              {user.is_admin && <PerUser refreshToken={refreshToken} />}
             </>
           )}
     </GlassPanel>
