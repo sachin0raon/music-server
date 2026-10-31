@@ -14,6 +14,7 @@ from .medialink import router as medialink_router
 from .models import Base
 from .playlists import router as playlists_router
 from .schema import ensure_columns
+from .downloads import router as downloads_router
 from .tracks import router as tracks_router
 from .videos import router as videos_router
 
@@ -56,6 +57,7 @@ app.include_router(playlists_router)
 app.include_router(library_router)
 app.include_router(medialink_router)
 app.include_router(videos_router)
+app.include_router(downloads_router)
 
 
 @app.on_event("startup")

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session as DbSession
 from .access import get_visible_track, resolve_file, visible_filter
 from .auth import current_user
 from .config import settings
+from .downloads import download_name
 from .db import get_db
 from .itunes import (
     embed_cover_in_file,
@@ -574,6 +575,23 @@ def get_track(track_id: int, user: User = Depends(current_user), db: DbSession =
     track = get_visible_track(db, user, track_id)
     owner = db.scalar(select(User.username).where(User.id == track.owner_id))
     return track_out(track, user.id, owner, detail=True)
+
+
+@router.get("/{track_id}/download")
+def download_track(track_id: int, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """The same bytes /stream already serves, as an attachment.
+
+    Visibility is unchanged -- own or shared, exactly as for playback -- so this
+    adds a filename and a Content-Disposition, not a permission.
+    """
+    track = get_visible_track(db, user, track_id)
+    path = resolve_file(track.file_path)
+    return FileResponse(
+        path,
+        media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+        filename=download_name(track.title, track.artist, path.suffix.lower(), track.original_name),
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/{track_id}/stream")

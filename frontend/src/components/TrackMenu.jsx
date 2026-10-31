@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CaretLeftIcon as CaretLeft, CheckIcon as Check, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
+import { CaretLeftIcon as CaretLeft, CheckIcon as Check, DownloadSimpleIcon as DownloadSimple, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
 import Modal from "./Modal";
 import TrackHeader from "./TrackHeader";
 import Field from "./Field";
@@ -14,12 +14,16 @@ import { transition, ease } from "../motion";
 const VIEW_ENTER = { duration: 0.14, delay: 0.03, ease: ease.smooth };
 const VIEW_EXIT = { duration: 0.05, ease: ease.smooth };
 
-function Item({ icon: Icon, children, onClick, danger, disabled, label, initialFocus }) {
+// `as` exists for the download, which has to be a real link: the session
+// cookie already authorises it, so the browser can own the transfer instead of
+// the page pulling the file into memory first.
+function Item({ as: Tag = "button", icon: Icon, children, onClick, danger, disabled, label, initialFocus, ...rest }) {
   return (
-    <button onClick={onClick} disabled={disabled} aria-label={label} data-autofocus={initialFocus ? "" : undefined}
+    <Tag onClick={onClick} disabled={Tag === "button" ? disabled : undefined} aria-label={label}
+      data-autofocus={initialFocus ? "" : undefined} {...rest}
       className={`interactive flex min-h-12 w-full items-center gap-3.5 rounded-tile px-2 text-left text-body disabled:opacity-50 ${danger ? "text-danger" : ""}`}>
       <Icon size={22} className={danger ? "" : "text-mute"} />{children}
-    </button>
+    </Tag>
   );
 }
 
@@ -223,6 +227,11 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
           <motion.div key="actions" initial={{ opacity: 0, x: reduce ? 0 : -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : 8, transition: exit }} transition={enter}>
             <Item icon={Info} initialFocus onClick={() => setView("details")} label={`Track details for ${track.title}`}>Track details</Item>
             <Item icon={Queue} onClick={queueTrack}>Add to queue</Item>
+            {/* A folder file's id is already its token, which is why the two
+                shapes differ only in the path. */}
+            <Item as="a" icon={DownloadSimple} download
+              href={isFolder ? `/api/library/file/${track.id}/download` : `/api/tracks/${track.id}/download`}
+              label={`Download ${track.title}`}>Download</Item>
             {!isFolder && (
               <>
                 <Item icon={ListPlus} onClick={() => setView("playlists")}>Add to playlist</Item>

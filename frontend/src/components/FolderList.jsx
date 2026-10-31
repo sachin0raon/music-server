@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue, XIcon as X } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue, XIcon as X , DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
@@ -200,6 +200,12 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
             {importing ? "Importing" : "Import"}
           </Button>
           <Button small onClick={queueSelected} disabled={importing}><Queue size={16} weight="bold" />Queue</Button>
+          {/* These ids are already folder tokens, which is what the zip route
+              expects for server-folder files. */}
+          <Button as="a" small download
+            href={`/api/downloads/zip?${[...selected].map((t) => `folder=${encodeURIComponent(t)}`).join("&")}`}>
+            <DownloadSimple size={16} weight="bold" />Download
+          </Button>
           <IconButton size="sm" label="Clear selection" onClick={() => setSelected(new Set())} disabled={importing}>
             <X size={16} weight="bold" />
           </IconButton>

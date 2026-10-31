@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from .auth import current_user
 from .config import settings
+from .downloads import download_name
 from .db import get_db
 from .models import Track, User
 from .tracks import (
@@ -365,6 +366,43 @@ def update_file_details(token: str, body: TrackEditBody, user: User = Depends(cu
 
     invalidate_negative_cache(f"folder:{token}")
     return _file_details_dict(token, path, user, db, force_reload=True)
+
+def folder_tags(token: str) -> tuple[str | None, str | None]:
+    """A folder file's title and artist, for naming a download.
+
+    Public because downloads.py needs it and the index it reads is private to
+    this module -- the alternative was reaching into _index from outside.
+    """
+    path = _path_for(token)
+    if path is None:
+        return None, None
+    try:
+        rel = str(path.relative_to(_require_source().resolve()))
+    except (HTTPException, ValueError):
+        return None, None
+    hit = _index.get(rel)
+    if not hit:
+        return None, None
+    return hit["meta"].get("title"), hit["meta"].get("artist")
+
+
+@router.get("/file/{token}/download")
+def download_file(token: str, user: User = Depends(current_user)):
+    """The same bytes /stream already serves, as an attachment.
+
+    No extra rule: a folder file is visible to any signed-in user either way.
+    """
+    path = _path_for(token)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    title, artist = folder_tags(token)
+    return FileResponse(
+        path,
+        media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+        filename=download_name(title, artist, path.suffix.lower(), path.name),
+        headers={"Cache-Control": "private, no-store"},
+    )
+
 
 @router.get("/file/{token}/stream")
 def stream_file(token: str, user: User = Depends(current_user)):

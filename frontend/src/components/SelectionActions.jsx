@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, MinusCircleIcon as MinusCircle, TrashIcon as Trash, XIcon as X } from "@phosphor-icons/react";
+import { QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, MinusCircleIcon as MinusCircle, DownloadSimpleIcon as DownloadSimple, TrashIcon as Trash, XIcon as X } from "@phosphor-icons/react";
 import Modal from "./Modal";
 import { Button, IconButton } from "./Button";
 import { api } from "../api";
@@ -52,6 +52,10 @@ export default function SelectionActions({ scope, selected, onClear }) {
   const toUnshare = owned.filter((t) => t.is_shared);
   const sharedToDelete = owned.filter((t) => t.is_shared).length;
 
+  // Not gated on `owned` like the others: everything selectable here is already
+  // playable by this user, and playable is the rule for downloading.
+  const zipHref = `/api/downloads/zip?${selected.map((t) => `track=${t.id}`).join("&")}`;
+
   const report = useCallback((done, failed, verb) => {
     showToast(failed
       ? `${verb} ${done} of ${done + failed}, ${failed} failed`
@@ -103,6 +107,12 @@ export default function SelectionActions({ scope, selected, onClear }) {
         </p>
         <Button small variant="accent" onClick={queueSelected} disabled={busy}>
           <Queue size={16} weight="bold" />Queue
+        </Button>
+        {/* A link, so the browser owns the transfer. The selection deliberately
+            survives the click: a download changes nothing, and clearing would
+            suggest it had. */}
+        <Button as="a" small href={zipHref} download>
+          <DownloadSimple size={16} weight="bold" />Download
         </Button>
         {toShare.length > 0 && (
           <Button small onClick={() => setShared(toShare, true)} disabled={busy}>
