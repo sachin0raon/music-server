@@ -305,6 +305,11 @@ export function PlayerProvider({ children }) {
   const repeatRef = useRef(repeat); // read inside `next`, which must keep a stable identity
   const origOrder = useRef(null); // track ids in the pre-shuffle order; null while shuffle is off
   const queueSource = useRef(null); // the list that started this queue, so it can follow its reorders
+  // Set by clearQueue, which leaves the playing track behind. Armed, the end of
+  // that track empties the queue instead of stopping on it. One-shot: anything
+  // that builds a queue again disarms it, so a queue that merely runs out keeps
+  // the old behaviour of sitting on the last track, replayable.
+  const clearedRef = useRef(false);
   const volRef = useRef(volume);
   const muteRef = useRef(muted);
   // The element's own duration is Infinity for streams it cannot measure up
@@ -331,7 +336,13 @@ export function PlayerProvider({ children }) {
   const next = useCallback((auto = false) => {
     const step = nextStep({ index: iRef.current, length: qRef.current.length, repeat: repeatRef.current, auto });
     if (step === "restart") restart();
-    else if (step === "stop") { const a = audioRef.current; a.pause(); a.currentTime = 0; }
+    else if (step === "stop") {
+      const a = audioRef.current; a.pause(); a.currentTime = 0;
+      // The track Clear left behind has finished and nothing was queued after
+      // it, so the queue goes rather than sitting at 0:00 on a track the user
+      // already said they were done with.
+      if (clearedRef.current) { clearedRef.current = false; setQueue([]); setIndex(-1); }
+    }
     else if (typeof step === "number") setIndex(step);
   }, [restart]);
 
@@ -553,10 +564,11 @@ export function PlayerProvider({ children }) {
     } catch { /* storage disabled: keep the level for this session only */ }
   }, [volume, muted]);
 
-  useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); setShuffle(false); setRepeat("off"); origOrder.current = null; queueSource.current = null; } }, [user]);
+  useEffect(() => { if (!user) { setQueue([]); setIndex(-1); setOpen(false); setShuffle(false); setRepeat("off"); origOrder.current = null; queueSource.current = null; clearedRef.current = false; } }, [user]);
 
   const playTrack = useCallback((t, list, source = null) => {
     failures.current = 0;
+    clearedRef.current = false;
     queueSource.current = source; // remember where the queue came from (e.g. a playlist)
     if (shuffleRef.current) {
       // Shuffled run starting from the tapped track. The pre-shuffle order is
@@ -646,6 +658,7 @@ export function PlayerProvider({ children }) {
     const q = qRef.current;
     const { items: next, added, skipped } = appendUnique(q, items);
     if (added) {
+      clearedRef.current = false; // queueing again takes back "I am done after this"
       // Keep the remembered pre-shuffle order in step, or turning shuffle off
       // would drop everything added while it was on.
       if (origOrder.current) origOrder.current = [...origOrder.current, ...next.slice(q.length).map((t) => t.id)];
@@ -770,12 +783,37 @@ export function PlayerProvider({ children }) {
 
   const dropTrack = useCallback((id) => dropTracks([id]), [dropTracks]);
 
+  // Empty the queue without interrupting what is playing.
+  //
+  // The playing track stays, because stopping it would make Clear read as Stop
+  // and there is already a pause control for that. It is the only thing left,
+  // so when it ends the queue empties for real -- see the "stop" branch of
+  // next(). With nothing playing there is nothing to keep and the queue goes at
+  // once, which is what the floating play button watches for.
+  const clearQueue = useCallback(() => {
+    const q = qRef.current, ix = iRef.current;
+    const current = ix >= 0 ? q[ix] : null;
+    if (!current) {
+      clearedRef.current = false;
+      origOrder.current = null;
+      setQueue([]);
+      setIndex(-1);
+      return;
+    }
+    clearedRef.current = true;
+    // Keep the remembered pre-shuffle order in step with what is left, or
+    // turning shuffle off would bring the cleared tracks back.
+    origOrder.current = origOrder.current ? [current.id] : null;
+    setQueue([current]);
+    setIndex(0);
+  }, []);
+
   // Repeat counts as "there is a next" because it wraps back to the top.
   const canNext = canGoNext({ index, length: queue.length, repeat });
   const value = useMemo(() => ({
-    track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, dropTracks, jumpTo,
+    track, queue, index, playing, open, setOpen, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, dropTracks, clearQueue, jumpTo,
     shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, addToQueue, volume, muted, setVolume, toggleMute,
-  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, dropTracks, jumpTo,
+  }), [track, queue, index, playing, open, playTrack, toggle, play, pause, next, prev, seek, patchTrack, dropTrack, dropTracks, clearQueue, jumpTo,
        shuffle, repeat, toggleShuffle, cycleRepeat, canNext, reorderQueue, extendQueue, addToQueue, volume, muted, setVolume, toggleMute]);
   const timeValue = useMemo(() => ({ time, duration }), [time, duration]);
 
