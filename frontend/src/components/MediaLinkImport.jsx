@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { LinkSimpleIcon as LinkSimple, DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import Field from "./Field";
@@ -40,6 +41,11 @@ export default function MediaLinkImport() {
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState(null);
   const [err, setErr] = useState("");
+  // Off every time, even with cookies saved. They are a live credential, and
+  // most links do not need them: sending them by default would spend the risk
+  // on every download to save a tick on the few that need it.
+  const [useCookies, setUseCookies] = useState(false);
+  const [hasCookies, setHasCookies] = useState(false);
 
   // Read inside the poll loop but never a reason to restart it.
   const bumpRef = useRef(bump);
@@ -48,6 +54,16 @@ export default function MediaLinkImport() {
   const jobId = job?.id ?? null;
   const jobState = job?.state ?? null;
   const running = jobState !== null && RUNNING.has(jobState);
+
+  // Decides between a toggle and a pointer to Account -- offering to use
+  // cookies that do not exist would be a switch that silently does nothing.
+  useEffect(() => {
+    let live = true;
+    api.get("/api/media/cookies")
+      .then((d) => { if (live) setHasCookies(!!d.saved); })
+      .catch(() => { /* treated as none saved */ });
+    return () => { live = false; };
+  }, []);
 
   // Adopt anything already running. The id otherwise lives only in the tab that
   // started it, so a reload halfway through would leave the download going with
@@ -91,7 +107,7 @@ export default function MediaLinkImport() {
     if (!value || busy) return;
     setBusy(true); setErr(""); setItem(null); setJob(null);
     try {
-      const d = await api.post("/api/media/probe-link", { url: value });
+      const d = await api.post("/api/media/probe-link", { url: value, use_cookies: useCookies });
       setItem(d);
       setChoice(d.formats[0] ? `src:${d.formats[0].id}` : "");
     } catch (ex) {
@@ -99,7 +115,7 @@ export default function MediaLinkImport() {
     } finally {
       setBusy(false);
     }
-  }, [url, busy]);
+  }, [url, busy, useCookies]);
 
   const start = useCallback(async () => {
     if (!item || !choice || busy) return;
@@ -111,16 +127,25 @@ export default function MediaLinkImport() {
       const body = kind === "mp3"
         ? { url: url.trim(), format_id: item.formats[0].id, convert: "mp3", bitrate: +value }
         : { url: url.trim(), format_id: value };
+      body.use_cookies = useCookies;
       setJob(await api.post("/api/media/fetch", body));
     } catch (ex) {
       setErr(ex.message);
     } finally {
       setBusy(false);
     }
-  }, [item, choice, url, busy]);
+  }, [item, choice, url, busy, useCookies]);
 
   const reset = useCallback(() => {
-    setUrl(""); setItem(null); setChoice(""); setJob(null); setErr("");
+    setUrl(""); setItem(null); setChoice(""); setJob(null); setErr(""); setUseCookies(false);
+  }, []);
+
+  // The formats on screen were what the site offered under the old setting, and
+  // signing in can change them. Dropping the result forces a fresh check rather
+  // than downloading against a list that no longer applies.
+  const toggleCookies = useCallback((on) => {
+    setUseCookies(on);
+    setItem(null); setChoice(""); setErr("");
   }, []);
 
   return (
@@ -139,6 +164,20 @@ export default function MediaLinkImport() {
           {busy && !item ? "Checking…" : "Check link"}
         </Button>
       </form>
+
+      {hasCookies ? (
+        <label className="mt-3 flex w-fit cursor-pointer items-center gap-2.5 text-small">
+          <input type="checkbox" checked={useCookies} onChange={(e) => toggleCookies(e.target.checked)}
+            disabled={running} className="h-4 w-4 accent-accent" />
+          Use my saved cookies for this link
+        </label>
+      ) : (
+        <p className="mt-3 text-micro text-mute">
+          Some sites only serve audio to a signed-in visitor.{" "}
+          <Link to="/account" className="text-accent underline underline-offset-2">Save cookies in Account</Link>{" "}
+          to use them here.
+        </p>
+      )}
 
       {item && !job && (
         <div className="mt-5">

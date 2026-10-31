@@ -3,6 +3,7 @@ import { SignOutIcon as SignOut } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
 import Field from "../components/Field";
+import CookieSettings from "../components/CookieSettings";
 import { Button } from "../components/Button";
 import { Skeleton, ErrorBox } from "../components/States";
 import { api } from "../api";
@@ -100,6 +101,7 @@ export default function Account() {
       <div className="space-y-4">
         <InstallApp />
         <ChangePassword />
+        <CookieSettings />
         {user.is_admin && <Admin />}
         <Button onClick={logout}><SignOut size={18} />Sign out</Button>
       </div>

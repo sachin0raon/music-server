@@ -13,16 +13,19 @@ sounds slightly worse for it, so conversion is offered rather than assumed.
 
 import secrets
 import shutil
+import tempfile
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from . import cookiestore
 from .auth import current_user
 from .config import settings
 from .db import SessionLocal
@@ -83,30 +86,60 @@ def _explain(exc: Exception) -> str:
     return "Could not read that link."
 
 
+# ---------- cookies ----------
+
+@contextmanager
+def _cookie_opts(user_id: int, use_cookies: bool):
+    """yt-dlp options carrying this user's cookies, and nothing left behind.
+
+    A copy rather than the stored file, because yt-dlp writes back: close()
+    calls save_cookies(), which rewrites whatever path it was given. Pointing it
+    at the stored file would rewrite it on every probe and let two jobs race on
+    the same truncate-and-rewrite. The copy dies with the context.
+
+    Yields empty options when the user has nothing saved, so a stale toggle
+    degrades to an anonymous attempt rather than an error.
+    """
+    if not use_cookies:
+        yield {}
+        return
+    base = settings.data_dir / "tmp"
+    base.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=base, prefix="ck-") as tmp:
+        copy = cookiestore.copy_for_use(user_id, Path(tmp))
+        yield {"cookiefile": str(copy)} if copy else {}
+
+
 # ---------- probing ----------
 
 # Starting a download needs the same answer the probe just produced: the title
 # and uploader become the file's tags, and the chosen format has to still be on
 # offer. Reading it from here rather than the request keeps both server-side
 # without making the user wait through a second extraction after they click.
-_probe_cache: dict[str, tuple[float, dict]] = {}
+#
+# Keyed by identity as well as URL: a signed-in probe can see formats, or a
+# whole item, that an anonymous one cannot, so one user's result must never be
+# served to another. Anonymous probes share a single key because they are
+# genuinely the same request.
+_probe_cache: dict[tuple[int, str], tuple[float, dict]] = {}
 _probe_cache_lock = threading.Lock()
 
 
-def _cached_probe(url: str) -> dict:
+def _cached_probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
+    key = (user_id if use_cookies else 0, url)
     now = time.monotonic()
     with _probe_cache_lock:
-        hit = _probe_cache.get(url)
+        hit = _probe_cache.get(key)
         if hit and now - hit[0] < PROBE_CACHE_SECONDS:
             return hit[1]
-    item = _probe(url)
+    item = _probe(url, user_id, use_cookies)
     with _probe_cache_lock:
-        for key in [k for k, (at, _) in _probe_cache.items() if now - at >= PROBE_CACHE_SECONDS]:
-            del _probe_cache[key]
+        for stale in [k for k, (at, _) in _probe_cache.items() if now - at >= PROBE_CACHE_SECONDS]:
+            del _probe_cache[stale]
         if len(_probe_cache) >= PROBE_CACHE_MAX:  # bounded: oldest first
             oldest = min(_probe_cache, key=lambda k: _probe_cache[k][0])
             del _probe_cache[oldest]
-        _probe_cache[url] = (now, item)
+        _probe_cache[key] = (now, item)
     return item
 
 # Containers that only ever carry audio. Consulted only when an extractor says
@@ -186,7 +219,7 @@ def _muxed_formats(info: dict) -> list[dict]:
     return out
 
 
-def _probe(url: str) -> dict:
+def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     from yt_dlp import YoutubeDL
     from yt_dlp.utils import DownloadError
 
@@ -198,8 +231,9 @@ def _probe(url: str) -> dict:
         "socket_timeout": PROBE_TIMEOUT_SECONDS,
     }
     try:
-        with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        with _cookie_opts(user_id, use_cookies) as cookie_opts:
+            with YoutubeDL({**opts, **cookie_opts}) as ydl:
+                info = ydl.extract_info(url, download=False)
     except DownloadError as exc:
         raise LinkError(_explain(exc)) from exc
     except Exception as exc:  # an extractor can raise almost anything
@@ -315,7 +349,8 @@ def _postprocessors(convert: str | None, bitrate: int | None) -> list[dict]:
     return steps
 
 
-def _download(job: Job, url: str, format_id: str, convert: str | None, bitrate: int | None) -> Path:
+def _download(job: Job, user_id: int, url: str, format_id: str, convert: str | None,
+              bitrate: int | None, use_cookies: bool) -> Path:
     from yt_dlp import YoutubeDL
     from yt_dlp.utils import DownloadError
 
@@ -345,8 +380,9 @@ def _download(job: Job, url: str, format_id: str, convert: str | None, bitrate: 
     }
 
     try:
-        with YoutubeDL(opts) as ydl:
-            ydl.download([url])
+        with _cookie_opts(user_id, use_cookies) as cookie_opts:
+            with YoutubeDL({**opts, **cookie_opts}) as ydl:
+                ydl.download([url])
     except DownloadError as exc:
         shutil.rmtree(work, ignore_errors=True)
         raise LinkError(_explain(exc)) from exc
@@ -369,10 +405,10 @@ def _safe_name(title: str, uploader: str, ext: str) -> str:
 
 
 def _run_job(job: Job, user_id: int, url: str, item: dict, format_id: str,
-             convert: str | None, bitrate: int | None) -> None:
+             convert: str | None, bitrate: int | None, use_cookies: bool) -> None:
     path = None
     try:
-        path = _download(job, url, format_id, convert, bitrate)
+        path = _download(job, user_id, url, format_id, convert, bitrate, use_cookies)
         job.set(state="importing")
         name = _safe_name(item.get("title") or "", item.get("uploader") or "", path.suffix.lower())
         # The session is opened here and not before: holding one across a
@@ -402,6 +438,9 @@ def _run_job(job: Job, user_id: int, url: str, item: dict, format_id: str,
 
 class ProbeBody(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
+    # Off unless asked for, every time. Cookies are a live credential, and
+    # sending them to a site that does not need them is a cost with no benefit.
+    use_cookies: bool = False
 
 
 class FetchBody(BaseModel):
@@ -409,15 +448,33 @@ class FetchBody(BaseModel):
     format_id: str = Field(min_length=1, max_length=64)
     convert: str | None = Field(default=None, pattern="^mp3$")
     bitrate: int | None = None
+    use_cookies: bool = False
+
+
+class CookieBody(BaseModel):
+    text: str = Field(min_length=1, max_length=cookiestore.MAX_BYTES)
+
+
+def _require_cookies(user_id: int, use_cookies: bool) -> None:
+    """Say so up front rather than letting it fail as 'this needs an account'.
+
+    Only reachable by a direct call or a toggle left on while the file was
+    cleared elsewhere: the form hides the toggle when nothing is saved.
+    """
+    if use_cookies and not cookiestore.status(user_id)["saved"]:
+        raise HTTPException(
+            status_code=400,
+            detail="No cookies saved. Add them in Account settings, or turn the option off.")
 
 
 @router.post("/probe-link")
 def probe_link(body: ProbeBody, user: User = Depends(current_user)):
     """What this link offers. Synchronous: it is seconds, not minutes."""
+    _require_cookies(user.id, body.use_cookies)
     _link_limiter.check(f"link:{user.id}")
     _link_limiter.hit(f"link:{user.id}")
     try:
-        return _cached_probe(body.url.strip())
+        return _cached_probe(body.url.strip(), user.id, body.use_cookies)
     except LinkError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -425,6 +482,7 @@ def probe_link(body: ProbeBody, user: User = Depends(current_user)):
 @router.post("/fetch")
 def from_media_link(body: FetchBody, user: User = Depends(current_user)):
     """Start a download. Returns at once; poll the job for the rest."""
+    _require_cookies(user.id, body.use_cookies)
     _link_limiter.check(f"link:{user.id}")
     _link_limiter.hit(f"link:{user.id}")
     if body.convert == "mp3" and body.bitrate not in MP3_BITRATES:
@@ -434,7 +492,7 @@ def from_media_link(body: FetchBody, user: User = Depends(current_user)):
     # rather than a second extraction. Still server-side: the title and uploader
     # that become the file's tags never come from the request body.
     try:
-        item = _cached_probe(body.url.strip())
+        item = _cached_probe(body.url.strip(), user.id, body.use_cookies)
     except LinkError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not any(f["id"] == body.format_id for f in item["formats"]):
@@ -443,7 +501,7 @@ def from_media_link(body: FetchBody, user: User = Depends(current_user)):
     job = Job(id=uuid.uuid4().hex, owner_id=user.id, title=item["title"])
     _put_job(job)
     _pool.submit(_run_job, job, user.id, body.url.strip(), item,
-                 body.format_id, body.convert, body.bitrate)
+                 body.format_id, body.convert, body.bitrate, body.use_cookies)
     return job.snapshot()
 
 
@@ -463,3 +521,35 @@ def list_media_jobs(user: User = Depends(current_user)):
 @router.get("/jobs/{job_id}")
 def media_job(job_id: str, user: User = Depends(current_user)):
     return _get_job(job_id, user.id).snapshot()
+
+
+# ---------- cookie file ----------
+
+# Saved rather than sent per link: a cookies.txt export is thousands of
+# characters, and pasting it into the download form for every link is the kind
+# of friction that stops the feature being used. Managed from Account instead,
+# where it reads as what it is -- a credential you keep.
+
+@router.get("/cookies")
+def cookie_status(user: User = Depends(current_user)):
+    """Whether a file is saved and when. Deliberately never its contents.
+
+    Nothing reads the cookies back out to the browser, so a stolen session on
+    this app cannot be turned into the sessions inside the file.
+    """
+    return cookiestore.status(user.id)
+
+
+@router.put("/cookies")
+def save_cookies(body: CookieBody, user: User = Depends(current_user)):
+    try:
+        cookiestore.save(user.id, body.text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return cookiestore.status(user.id)
+
+
+@router.delete("/cookies")
+def delete_cookies(user: User = Depends(current_user)):
+    cookiestore.clear(user.id)
+    return cookiestore.status(user.id)
