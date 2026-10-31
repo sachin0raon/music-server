@@ -8,9 +8,11 @@ set, which is what makes "private" a property of the schema rather than of
 remembering to write the right WHERE clause.
 """
 
+import json
 import logging
 import os
 import secrets
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -32,6 +34,43 @@ router = APIRouter(prefix="/api/videos", tags=["videos"])
 # than the browser not trying to render it in a tab.
 DOWNLOAD_TYPE = "application/octet-stream"
 
+# What Apple devices play. Deliberately conservative: the point of reading the
+# codecs at all is to stop promising a file will open when it will not, so a
+# codec that only newer hardware decodes (AV1) is left out and flagged rather
+# than waved through.
+APPLE_VIDEO = {"h264", "avc1", "hevc", "h265"}
+APPLE_AUDIO = {"aac", "mp3", "alac", "mp4a"}
+
+CODEC_TIMEOUT = 30
+
+
+def read_codecs(path: Path) -> tuple[str | None, str | None]:
+    """The finished file's video and audio codecs, or (None, None).
+
+    Never fatal: a missing or unhappy ffprobe costs a badge, not a download
+    that already succeeded.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=CODEC_TIMEOUT,
+        )
+        streams = json.loads(out.stdout or "{}").get("streams", [])
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        log.warning("Could not read codecs from %s: %s", path.name, exc)
+        return None, None
+    vcodec = next((s.get("codec_name") for s in streams if s.get("codec_type") == "video"), None)
+    acodec = next((s.get("codec_name") for s in streams if s.get("codec_type") == "audio"), None)
+    return vcodec, acodec
+
+
+def plays_on_apple(vcodec: str | None, acodec: str | None) -> bool | None:
+    """None when we could not tell, rather than a confident guess either way."""
+    if not vcodec and not acodec:
+        return None
+    return ((vcodec or "").lower() in APPLE_VIDEO) and ((acodec or "").lower() in APPLE_AUDIO)
+
 
 def video_out(v: Video) -> dict:
     """Never file_path or thumb_path: bytes are reachable only through a route
@@ -44,6 +83,11 @@ def video_out(v: Video) -> dict:
         "width": v.width,
         "height": v.height,
         "container": v.container,
+        "vcodec": v.vcodec,
+        "acodec": v.acodec,
+        # The container cannot answer this: an mp4 holding VP9 and Opus is
+        # still an mp4, and still will not open on a phone.
+        "apple_ok": plays_on_apple(v.vcodec, v.acodec),
         "file_size": v.file_size,
         "source_url": v.source_url,
         "has_thumb": bool(v.thumb_path),
@@ -73,6 +117,7 @@ def store_video(db: DbSession, user: User, url: str, item: dict, fmt: dict,
     final = settings.data_dir / rel
     final.parent.mkdir(parents=True, exist_ok=True)
     size = path.stat().st_size
+    vcodec, acodec = read_codecs(path)
     os.replace(path, final)
 
     thumb_rel = None
@@ -94,6 +139,8 @@ def store_video(db: DbSession, user: User, url: str, item: dict, fmt: dict,
         height=fmt.get("height"),
         # What the merge actually produced, not what it was asked for.
         container=ext.lstrip(".")[:16],
+        vcodec=(vcodec or None),
+        acodec=(acodec or None),
         source_url=url[:2048],
         format_id=str(fmt.get("id"))[:64],
         source_hash=digest,

@@ -128,9 +128,14 @@ class Video(Base):
     duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # What the merge actually produced, read from the file rather than assumed:
-    # a request for mp4 lands as mkv whenever the codecs cannot be remuxed.
     container: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Read off the finished file with ffprobe, because the container does not
+    # answer the question people actually have. Asking for mp4 always gets mp4
+    # -- yt-dlp disables its mkv fallback once a format is named -- and ffmpeg
+    # will happily put VP9 and Opus inside it, which an iPhone then refuses to
+    # play despite the .mp4 on the end.
+    vcodec: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    acodec: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     format_id: Mapped[str] = mapped_column(String(64), nullable=False)

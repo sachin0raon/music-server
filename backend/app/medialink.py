@@ -160,6 +160,12 @@ def _cached_probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict
 # a webm that is audio-only says so through vcodec.
 AUDIO_EXTS = {"m4a", "mp3", "opus", "ogg", "oga", "aac", "flac", "wav", "mka", "weba"}
 
+# The mirror of AUDIO_EXTS, for the same reason: an extractor that declares no
+# codecs at all leaves the container as the only evidence. webm is here rather
+# than in AUDIO_EXTS because it is usually video; an audio-only webm says so
+# through vcodec, which is checked first.
+VIDEO_EXTS = {"mp4", "webm", "mkv", "mov", "m4v", "avi", "flv", "ts", "3gp"}
+
 
 def _formats_of(info: dict) -> list[dict]:
     """Every format, including the shape where there is only one.
@@ -224,8 +230,7 @@ def _muxed_formats(info: dict) -> list[dict]:
     for f in _formats_of(info):
         if _is_audio_only(f) or f.get("acodec") == "none":
             continue
-        has_picture = f.get("height") or f.get("width") or (f.get("vcodec") not in (None, "none"))
-        if not has_picture:
+        if not _has_picture(f):
             continue
         out.append(_entry(f, True))
     out.sort(key=lambda f: (-(f["abr"] or 0), f["size"] or 0))
@@ -249,6 +254,26 @@ def _video_entry(f: dict) -> dict:
     }
 
 
+def _has_picture(f: dict) -> bool:
+    """Whether a format carries a picture.
+
+    Mirrors _is_audio_only, including its last resort: plenty of extractors fill
+    in neither codec nor a height, and requiring one of those declared every
+    such format invisible -- not audio, not video, and so a link that yt-dlp
+    handles perfectly well reported as having nothing to download.
+    """
+    if f.get("height") or f.get("width") or f.get("fps"):
+        return True
+    vcodec = f.get("vcodec")
+    if vcodec and vcodec != "none":
+        return True
+    if vcodec == "none":
+        return False
+    if _is_audio_only(f):
+        return False
+    return (f.get("ext") or "").lower() in VIDEO_EXTS  # nothing declared: trust the container
+
+
 def _video_formats(info: dict) -> list[dict]:
     """Streams carrying a picture, best first.
 
@@ -257,8 +282,7 @@ def _video_formats(info: dict) -> list[dict]:
     """
     out = []
     for f in _formats_of(info):
-        has_picture = f.get("height") or f.get("width") or (f.get("vcodec") not in (None, "none"))
-        if not has_picture:
+        if not _has_picture(f):
             continue
         out.append(_video_entry(f))
     out.sort(key=lambda f: (-(f["height"] or 0), -(f["fps"] or 0), f["size"] or 0))
@@ -536,9 +560,11 @@ def _download_video(job: Job, user_id: int, url: str, fmt: dict, use_cookies: bo
         "no_warnings": True,
         "noplaylist": True,
         "format": _video_selector(fmt),
-        # A request, not a guarantee: yt-dlp falls back to mkv when the codecs
-        # cannot be remuxed into mp4, which is why the container is read back
-        # off the file rather than assumed here.
+        # Naming a format disables yt-dlp's mkv fallback (get_compatible_ext:
+        # allow_mkv is false once preferences are set), so this always produces
+        # mp4 -- ffmpeg will put even VP9 and Opus inside it. That makes the
+        # container useless as a compatibility signal, which is why the codecs
+        # are read off the finished file instead.
         "merge_output_format": "mp4",
         "outtmpl": str(work / "%(id)s.%(ext)s"),
         "progress_hooks": [hook],

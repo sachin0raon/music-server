@@ -36,10 +36,14 @@ function VideoCard({ video, onDelete }) {
         {video.uploader && <p className="truncate text-small text-mute">{video.uploader}</p>}
         <p className="truncate text-micro text-mute">
           {detail}
-          {video.container && video.container !== "mp4" && (
-            // MKV is what a merge falls back to when the codecs cannot be
-            // remuxed. Worth flagging: iOS and Safari will not open it.
-            <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 uppercase">{video.container}</span>
+          {/* Keyed on the codecs, not the extension. Asking yt-dlp for mp4
+              always yields mp4, and ffmpeg will put VP9 and Opus inside it,
+              so ".mp4" says nothing about whether a phone can open it. */}
+          {video.apple_ok === false && (
+            <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5"
+              title={`${video.vcodec || "?"} / ${video.acodec || "?"} \u2014 iPhone and Safari may not play this`}>
+              {[video.vcodec, video.acodec].filter(Boolean).join(" / ") || "codecs"}
+            </span>
           )}
         </p>
       </div>
