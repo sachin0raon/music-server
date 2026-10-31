@@ -11,6 +11,8 @@ pasted in. Nothing here ever sends it back to the browser.
 
 import os
 import shutil
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -99,17 +101,80 @@ def clear(user_id: int) -> None:
     path_for(user_id).unlink(missing_ok=True)
 
 
-def copy_for_use(user_id: int, work_dir: Path) -> Path | None:
-    """A throwaway copy for yt-dlp, or None when nothing is saved.
+# One lock per user, held only across the swap itself. Downloads run for
+# minutes; locking one out for that long would let a single user's queue block
+# a worker that everyone else is waiting on.
+_locks_guard = threading.Lock()
+_locks: dict[int, threading.Lock] = {}
+
+
+def _lock_for(user_id: int) -> threading.Lock:
+    with _locks_guard:
+        return _locks.setdefault(user_id, threading.Lock())
+
+
+def _stamp(path: Path) -> tuple[int, int] | None:
+    """Enough to tell whether the file changed under us."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+@contextmanager
+def lend(user_id: int, work_dir: Path):
+    """Hand yt-dlp a private copy, then keep whatever it wrote back.
 
     yt-dlp rewrites whatever cookie file it is given -- close() calls
-    cookiejar.save() -- so handing it the stored path would mutate it on every
-    probe and let two jobs race on the same truncate-and-rewrite. It only ever
-    sees a copy, which the caller's temporary directory takes away afterwards.
+    cookiejar.save() -- so it gets a copy rather than the stored path: two jobs
+    pointed at one file would race on the same truncate-and-rewrite.
+
+    Keeping the result matters as much as isolating it. Sites rotate session
+    cookies as they are used, and the rotated ones come back through that same
+    write. Throwing the copy away unread left every request replaying the
+    original export, which the site had already retired -- so the cookies worked
+    once and then looked like a bot forever after.
+
+    Yields None when nothing is saved, so a stale toggle degrades to an
+    anonymous attempt rather than an error.
     """
     source = path_for(user_id)
-    if not source.is_file():
-        return None
+    before = _stamp(source)
+    if before is None:
+        yield None
+        return
     dest = work_dir / COOKIE_FILE
     shutil.copyfile(source, dest)
-    return dest
+    try:
+        yield dest
+    finally:
+        _adopt(user_id, dest, before)
+
+
+def _adopt(user_id: int, used: Path, before: tuple[int, int]) -> None:
+    """Replace the stored file with the one yt-dlp just finished with.
+
+    Deliberately forgiving: this runs even when the operation failed, because
+    the rotation happened at the site regardless of whether the download did.
+    Anything unreadable or no longer a cookies.txt is dropped instead, so a run
+    that ended with an empty jar cannot wipe a working file.
+    """
+    try:
+        content = validate(used.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return
+    target = path_for(user_id)
+    with _lock_for(user_id):
+        # Someone else finished while we were running, so their cookies came
+        # from a later rotation than ours. Ours are already dead; leave theirs.
+        if _stamp(target) != before:
+            return
+        tmp = target.with_name(f".{COOKIE_FILE}.{os.getpid()}.{threading.get_ident()}")
+        try:
+            fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            os.replace(tmp, target)  # atomic: a reader sees one file or the other
+        except OSError:
+            tmp.unlink(missing_ok=True)

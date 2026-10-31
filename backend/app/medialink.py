@@ -92,10 +92,10 @@ def _explain(exc: Exception) -> str:
 def _cookie_opts(user_id: int, use_cookies: bool):
     """yt-dlp options carrying this user's cookies, and nothing left behind.
 
-    A copy rather than the stored file, because yt-dlp writes back: close()
-    calls save_cookies(), which rewrites whatever path it was given. Pointing it
-    at the stored file would rewrite it on every probe and let two jobs race on
-    the same truncate-and-rewrite. The copy dies with the context.
+    The copy, and the keeping of what yt-dlp writes into it, both belong to
+    cookiestore.lend -- see it for why a rotated cookie has to survive the
+    operation. Nested inside the temporary directory so the swap happens while
+    the file yt-dlp wrote still exists.
 
     Yields empty options when the user has nothing saved, so a stale toggle
     degrades to an anonymous attempt rather than an error.
@@ -106,8 +106,8 @@ def _cookie_opts(user_id: int, use_cookies: bool):
     base = settings.data_dir / "tmp"
     base.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=base, prefix="ck-") as tmp:
-        copy = cookiestore.copy_for_use(user_id, Path(tmp))
-        yield {"cookiefile": str(copy)} if copy else {}
+        with cookiestore.lend(user_id, Path(tmp)) as copy:
+            yield {"cookiefile": str(copy)} if copy else {}
 
 
 # ---------- probing ----------
