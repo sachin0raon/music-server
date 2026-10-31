@@ -9,6 +9,7 @@ doing its main job -- so the file comes from a browser extension export and is
 pasted in. Nothing here ever sends it back to the browser.
 """
 
+import logging
 import os
 import shutil
 import threading
@@ -17,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import settings
+
+log = logging.getLogger("cookies")
 
 COOKIE_FILE = "cookies.txt"
 MAX_BYTES = 256 * 1024
@@ -31,6 +34,12 @@ ENTRY_FIELDS = 7
 # is rejected here rather than at download time, where it would surface as "this
 # item is private" with nothing pointing back at the cause.
 HEADERS = ("# netscape http cookie file", "# http cookie file")
+
+# Names a site sets once you are signed in. Logged by name so a failing export
+# can be told apart from a rejected one; the values are session credentials and
+# are never written anywhere.
+AUTH_HINTS = ("LOGIN_INFO", "SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID",
+              "SID", "SSID", "HSID", "sessionid", "auth_token", "li_at")
 
 BAD_FORMAT = (
     "That does not look like a cookies.txt file. Export one with a cookies.txt "
@@ -108,6 +117,30 @@ _locks_guard = threading.Lock()
 _locks: dict[int, threading.Lock] = {}
 
 
+def describe(path: Path) -> str:
+    """A cookie file summarised for a log line: counts, hosts and auth names.
+
+    Never a cookie value. Those are live credentials, and a log file is read by
+    more people, and kept for longer, than the file they came from.
+    """
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return f"unreadable ({exc})"
+    names, hosts = [], set()
+    for line in lines:
+        if not _is_entry(line):
+            continue
+        body = line[len(HTTPONLY_PREFIX):] if line.startswith(HTTPONLY_PREFIX) else line
+        parts = body.split("\t")
+        hosts.add(parts[0].lstrip("."))
+        names.append(parts[5])
+    found = sorted({n for n in names if n in AUTH_HINTS})
+    top = sorted(hosts)[:3]
+    return (f"{len(names)} cookie(s) for {', '.join(top)}{' and more' if len(hosts) > 3 else ''}; "
+            f"sign-in cookies: {', '.join(found) if found else 'NONE FOUND'}")
+
+
 def _lock_for(user_id: int) -> threading.Lock:
     with _locks_guard:
         return _locks.setdefault(user_id, threading.Lock())
@@ -146,6 +179,13 @@ def lend(user_id: int, work_dir: Path):
         return
     dest = work_dir / COOKIE_FILE
     shutil.copyfile(source, dest)
+    summary = describe(dest)
+    # Loud when there is no sign-in cookie at all: the request will go out
+    # looking anonymous and the site's refusal will not say why.
+    if "NONE FOUND" in summary:
+        log.warning("User %s: cookies carry no recognised sign-in cookie -- %s", user_id, summary)
+    else:
+        log.info("User %s: using cookies -- %s", user_id, summary)
     try:
         yield dest
     finally:
@@ -162,13 +202,16 @@ def _adopt(user_id: int, used: Path, before: tuple[int, int]) -> None:
     """
     try:
         content = validate(used.read_text(encoding="utf-8", errors="replace"))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        log.warning("User %s: not keeping the returned cookies, saved file left alone (%s)",
+                    user_id, exc)
         return
     target = path_for(user_id)
     with _lock_for(user_id):
         # Someone else finished while we were running, so their cookies came
         # from a later rotation than ours. Ours are already dead; leave theirs.
         if _stamp(target) != before:
+            log.info("User %s: another operation refreshed the cookies first, keeping theirs", user_id)
             return
         tmp = target.with_name(f".{COOKIE_FILE}.{os.getpid()}.{threading.get_ident()}")
         try:
@@ -176,5 +219,7 @@ def _adopt(user_id: int, used: Path, before: tuple[int, int]) -> None:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(content)
             os.replace(tmp, target)  # atomic: a reader sees one file or the other
-        except OSError:
+            log.info("User %s: refreshed the saved cookies -- %s", user_id, describe(target))
+        except OSError as exc:
+            log.warning("User %s: could not write refreshed cookies: %s", user_id, exc)
             tmp.unlink(missing_ok=True)

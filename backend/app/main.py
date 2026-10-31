@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,6 +15,14 @@ from .models import Base
 from .playlists import router as playlists_router
 from .schema import ensure_columns
 from .tracks import router as tracks_router
+
+# uvicorn configures its own loggers and leaves the root one alone, so without
+# this the app's own messages below WARNING go nowhere. uvicorn's loggers do not
+# propagate, so its output is not duplicated.
+logging.basicConfig(
+    level=settings.log_level,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 

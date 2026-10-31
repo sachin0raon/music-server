@@ -11,6 +11,7 @@ re-encoding to MP3 by default -- makes a bigger file out of a lossy source and
 sounds slightly worse for it, so conversion is offered rather than assumed.
 """
 
+import logging
 import secrets
 import shutil
 import tempfile
@@ -37,6 +38,8 @@ from .tracks import ALLOWED_EXT, FileUpload, _process, _result
 # /{track_id} parsed as an int, so any literal path added under it is shadowed
 # unless the include order happens to be right. These are links and jobs rather
 # than tracks in any case.
+log = logging.getLogger("medialink")
+
 router = APIRouter(prefix="/api/media", tags=["medialink"])
 
 YTDLP_PINNED = "2026.10.26"  # keep in step with requirements.txt
@@ -232,11 +235,16 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     }
     try:
         with _cookie_opts(user_id, use_cookies) as cookie_opts:
+            log.info("Probing %s (cookies: %s)", url, "yes" if cookie_opts else "no")
             with YoutubeDL({**opts, **cookie_opts}) as ydl:
                 info = ydl.extract_info(url, download=False)
     except DownloadError as exc:
+        # The message the user sees is deliberately vague; the real one is the
+        # only thing that says whether a sign-in was the problem.
+        log.warning("Probe failed for %s (cookies: %s): %s", url, use_cookies, exc)
         raise LinkError(_explain(exc)) from exc
     except Exception as exc:  # an extractor can raise almost anything
+        log.warning("Probe failed for %s (cookies: %s): %s", url, use_cookies, exc)
         raise LinkError(_explain(exc)) from exc
 
     if info is None:
@@ -381,12 +389,16 @@ def _download(job: Job, user_id: int, url: str, format_id: str, convert: str | N
 
     try:
         with _cookie_opts(user_id, use_cookies) as cookie_opts:
+            log.info("Downloading %s format %s (cookies: %s)", url, format_id,
+                     "yes" if cookie_opts else "no")
             with YoutubeDL({**opts, **cookie_opts}) as ydl:
                 ydl.download([url])
     except DownloadError as exc:
+        log.warning("Download failed for %s (cookies: %s): %s", url, use_cookies, exc)
         shutil.rmtree(work, ignore_errors=True)
         raise LinkError(_explain(exc)) from exc
     except Exception as exc:
+        log.warning("Download failed for %s (cookies: %s): %s", url, use_cookies, exc)
         shutil.rmtree(work, ignore_errors=True)
         raise LinkError(_explain(exc)) from exc
 
@@ -545,7 +557,10 @@ def save_cookies(body: CookieBody, user: User = Depends(current_user)):
     try:
         cookiestore.save(user.id, body.text)
     except ValueError as exc:
+        log.warning("User %s: rejected a pasted cookies file: %s", user.id, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    log.info("User %s: saved cookies -- %s", user.id,
+             cookiestore.describe(cookiestore.path_for(user.id)))
     return cookiestore.status(user.id)
 
 

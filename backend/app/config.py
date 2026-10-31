@@ -33,6 +33,10 @@ class Settings:
     # Files volume
     data_dir: Path = Path(os.getenv("DATA_DIR", "/data"))
 
+    # Nothing configures logging otherwise, which leaves the root logger at
+    # WARNING and drops every INFO line the app writes.
+    log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
     # Sessions
     secret_key: str = _required("SECRET_KEY")
     session_days: int = int(os.getenv("SESSION_DAYS", "30"))
