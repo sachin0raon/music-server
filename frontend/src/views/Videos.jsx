@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { DownloadSimpleIcon as DownloadSimple, TrashIcon as Trash, FilmSlateIcon as FilmSlate, LinkSimpleIcon as LinkSimple } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { DownloadSimpleIcon as DownloadSimple, TrashIcon as Trash, FilmSlateIcon as FilmSlate, LinkSimpleIcon as LinkSimple, PlusIcon as Plus } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
 import Modal from "../components/Modal";
@@ -85,12 +86,23 @@ export default function Videos() {
 
   return (
     <>
-      <PageHeader title="Videos" subtitle="Downloaded videos, private to you" />
+      <PageHeader title="Videos" subtitle="Downloaded videos, private to you"
+        actions={<IconButton as={Link} to="/upload" label="Add a video" variant="glass"><Plus size={20} /></IconButton>} />
+
+      {/* Said here rather than only in the empty state: the question "how do I
+          add another" arrives when the page already has videos on it, which is
+          exactly when an empty state is not on screen. */}
+      <p className="mb-4 max-w-[68ch] text-small text-mute">
+        Videos come from <Link to="/upload" className="text-accent underline underline-offset-2">Add from a page</Link>{" "}
+        on the Upload page &mdash; paste a link and choose a video format. Dropping a file there adds audio to your
+        library, not video.
+      </p>
 
       {loading ? <Skeleton rows={3} /> : error ? <ErrorBox message={error} onRetry={reload} /> : (
         items.length === 0 ? (
-          <Empty icon={FilmSlate} title="No videos yet">
-            Paste a link on the Upload page and pick a video format to download one.
+          <Empty icon={FilmSlate} title="No videos yet"
+            action={<Button as={Link} to="/upload" variant="accent">Go to Upload</Button>}>
+            Paste a link there and pick a video format to download one.
           </Empty>
         ) : (
           <ul className="space-y-2">
