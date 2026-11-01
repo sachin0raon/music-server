@@ -92,6 +92,10 @@ def _explain(exc: Exception) -> str:
             f"The site has changed and the installed yt-dlp ({YTDLP_PINNED}) can no longer read it. "
             "Updating yt-dlp should fix this."
         )
+    # Reachable in ordinary use: a probe result is cached for minutes, so the
+    # stream picked from it can be gone by the time Download is pressed.
+    if "requested format is not available" in text:
+        return "That stream is no longer on offer. Check the link again and pick a format."
     if "private" in text or "members-only" in text or "sign in" in text:
         return "That item is private or needs an account."
     if "unavailable" in text or "removed" in text:
