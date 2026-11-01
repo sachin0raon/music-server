@@ -262,13 +262,16 @@ def _has_picture(f: dict) -> bool:
     such format invisible -- not audio, not video, and so a link that yt-dlp
     handles perfectly well reported as having nothing to download.
     """
-    if f.get("height") or f.get("width") or f.get("fps"):
-        return True
     vcodec = f.get("vcodec")
-    if vcodec and vcodec != "none":
-        return True
+    # Checked before the dimensions, not after: a storyboard declares no video
+    # codec and still carries a height, so trusting the height first offered
+    # YouTube's thumbnail sheets as a 27p download.
     if vcodec == "none":
         return False
+    if f.get("height") or f.get("width") or f.get("fps"):
+        return True
+    if vcodec:
+        return True
     if _is_audio_only(f):
         return False
     return (f.get("ext") or "").lower() in VIDEO_EXTS  # nothing declared: trust the container
@@ -298,6 +301,12 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
         "no_warnings": True,
         "noplaylist": True,  # a link copied from the address bar often carries ?list=
         "skip_download": True,
+        # Probing does its own filtering of info["formats"], so yt-dlp's format
+        # selection is a step we never use -- and it is fatal by default. A site
+        # that returns only storyboards, or anything the default selector cannot
+        # satisfy, killed the probe with "Requested format is not available"
+        # while the formats we actually wanted were sitting in the result.
+        "ignore_no_formats_error": True,
         "socket_timeout": PROBE_TIMEOUT_SECONDS,
     }
     try:
@@ -328,7 +337,15 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     formats = _audio_formats(info) or _muxed_formats(info)
     videos = _video_formats(info)
     if not formats and not videos:
-        raise LinkError("That link has nothing this app can download.")
+        # Reached when the site answered but withheld the streams -- YouTube
+        # does this to clients it does not trust, returning only storyboards.
+        # Signed-in cookies from a datacenter address make that likelier, not
+        # less, so the suggestion is worth making where it can be acted on.
+        raise LinkError(
+            "That link offered nothing downloadable. The site may be withholding it; "
+            + ("try again with cookies turned off." if use_cookies
+               else "signing in from Account settings and turning cookies on may help.")
+        )
 
     return {
         "title": info.get("title") or "",
