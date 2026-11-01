@@ -194,9 +194,10 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
           under the bottom navigation on a phone, and the import action would be lost */}
       {selected.size > 0 && (
         <GlassPanel className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
-          {/* The count carries the number, so the buttons do not repeat it:
-              three labelled buttons plus a count wrapped onto two lines on a
-              phone. */}
+          {/* The count carries the number, so the buttons do not repeat it.
+              Clear is worded like the rest: it was an icon to save a line, and
+              with Download and Copy link here the row wraps on a phone anyway,
+              which left a lone X as the one control you had to guess at. */}
           <p className="mr-auto whitespace-nowrap text-small text-mute">{selected.size} selected</p>
           <Button variant="accent" small onClick={importSelected} disabled={importing}>
             {importing ? "Importing" : "Import"}
@@ -211,9 +212,9 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
           <Button small onClick={() => copyLink({ kind: "zip", folders: [...selected] })} disabled={importing}>
             <LinkSimple size={16} weight="bold" />Copy link
           </Button>
-          <IconButton size="sm" label="Clear selection" onClick={() => setSelected(new Set())} disabled={importing}>
-            <X size={16} weight="bold" />
-          </IconButton>
+          <Button small onClick={() => setSelected(new Set())} disabled={importing}>
+            <X size={16} weight="bold" />Clear
+          </Button>
         </GlassPanel>
       )}
 
