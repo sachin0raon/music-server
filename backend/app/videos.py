@@ -31,10 +31,6 @@ log = logging.getLogger("videos")
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
 
-# Served as a download rather than for playback, so the exact type matters less
-# than the browser not trying to render it in a tab.
-DOWNLOAD_TYPE = "application/octet-stream"
-
 # What Apple devices play. Deliberately conservative: the point of reading the
 # codecs at all is to stop promising a file will open when it will not, so a
 # codec that only newer hardware decodes (AV1) is left out and flagged rather

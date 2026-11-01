@@ -270,9 +270,6 @@ def _zip_response(tracks: list[int], folders: list[str], user: User, db: DbSessi
 # that stops being shared, or an account that is deleted, takes its links with
 # it rather than leaving them working.
 
-KINDS = {"track", "folder", "video", "zip"}
-
-
 class LinkBody(BaseModel):
     kind: str = Field(pattern="^(track|folder|video|zip)$")
     id: int | None = None
