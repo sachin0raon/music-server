@@ -8,3 +8,9 @@ mutagen==1.48.1
 argon2-cffi==25.1.0
 python-dotenv==1.2.4
 yt-dlp==2026.10.26
+# The JavaScript yt-dlp runs in deno to solve YouTube's "n" challenge. Without
+# it the challenge fails and YouTube returns storyboards only -- 2 formats, no
+# audio and no video. Shipped as a pinned package rather than letting yt-dlp
+# fetch it at run time (--remote-components), so no executable code arrives
+# from the network after the image is built.
+yt-dlp-ejs==0.8.0
