@@ -202,8 +202,18 @@ def _is_audio_only(f: dict) -> bool:
     return (f.get("ext") or "").lower() in AUDIO_EXTS  # nothing declared: trust the container
 
 
+def _is_drc(f: dict) -> bool:
+    """A dynamic-range-compressed copy of a track that also exists plain.
+
+    Same language, same bitrate, quieter. It doubles the list and is never what
+    someone picking a download is after.
+    """
+    return "drc" in f"{f.get('format_id') or ''} {f.get('format_note') or ''}".lower()
+
+
 def _entry(f: dict, muxed: bool) -> dict:
     return {
+        "language": f.get("language"),
         "id": f.get("format_id"),
         "ext": f.get("ext"),
         "codec": (f.get("acodec") or "").split(".")[0],
@@ -215,9 +225,26 @@ def _entry(f: dict, muxed: bool) -> dict:
 
 
 def _audio_formats(info: dict) -> list[dict]:
-    """Audio-only streams, best first."""
-    out = [_entry(f, False) for f in _formats_of(info) if _is_audio_only(f)]
-    out.sort(key=lambda f: (f["abr"] or 0), reverse=True)
+    """The best audio-only stream per language, best first.
+
+    A video with a dozen dubbed tracks offers every one of them at two
+    qualities in two codecs, plus compressed copies: sixty-odd rows describing
+    twelve actual choices. Only the quality differences are collapsed -- the
+    languages are real alternatives and all stay.
+    """
+    best: dict[str, dict] = {}
+    for f in _formats_of(info):
+        if not _is_audio_only(f) or _is_drc(f):
+            continue
+        key = f.get("language") or f.get("format_id") or ""
+        current = best.get(key)
+        if current is None or (f.get("abr") or 0) > (current.get("abr") or 0):
+            best[key] = f
+    out = [_entry(f, False) for f in best.values()]
+    # The track the video was made in first, then the rest by quality: it is
+    # what almost everyone wants and otherwise it sits wherever its bitrate
+    # happens to put it.
+    out.sort(key=lambda f: (0 if "original" in (f["note"] or "").lower() else 1, -(f["abr"] or 0)))
     return out
 
 
@@ -281,18 +308,50 @@ def _has_picture(f: dict) -> bool:
     return (f.get("ext") or "").lower() in VIDEO_EXTS  # nothing declared: trust the container
 
 
+# Which codec wins when several offer the same resolution. h264 first because
+# it plays on anything, including the phone the file is probably headed for;
+# the others make smaller files that fewer things will open.
+_CODEC_RANK = ("avc1", "h264", "hevc", "av01", "vp9", "vp09")
+
+
+def _codec_rank(vcodec: str | None) -> int:
+    base = (vcodec or "").split(".")[0].lower()
+    return _CODEC_RANK.index(base) if base in _CODEC_RANK else len(_CODEC_RANK)
+
+
 def _video_formats(info: dict) -> list[dict]:
-    """Streams carrying a picture, best first.
+    """One stream per resolution, best first.
 
     Includes video-only streams: on most large sites those are the only way to
     get above 720p, and the audio is merged back in at download time.
+
+    A site commonly serves each resolution several times over -- once per codec
+    and again as an HLS manifest -- which turns eight real choices into nearly
+    forty rows, most of them unable to even report a size. Resolution is what
+    people choose by, so that is what a row represents.
     """
-    out = []
-    for f in _formats_of(info):
-        if not _has_picture(f):
-            continue
-        out.append(_video_entry(f))
-    out.sort(key=lambda f: (-(f["height"] or 0), -(f["fps"] or 0), f["size"] or 0))
+    picture = [f for f in _formats_of(info) if _has_picture(f)]
+    # The manifest copies duplicate streams that are also offered directly, and
+    # report no size. Dropped only when a direct one exists: plenty of sites
+    # serve nothing else.
+    direct = [f for f in picture if "m3u8" not in (f.get("protocol") or "")]
+    picture = direct or picture
+
+    best: dict = {}
+    for f in picture:
+        key = f.get("height") or f.get("format_id")
+        current = best.get(key)
+        if current is None or (
+            _codec_rank(f.get("vcodec")),
+            not (f.get("filesize") or f.get("filesize_approx")),  # a known size wins ties
+        ) < (
+            _codec_rank(current.get("vcodec")),
+            not (current.get("filesize") or current.get("filesize_approx")),
+        ):
+            best[key] = f
+
+    out = [_video_entry(f) for f in best.values()]
+    out.sort(key=lambda f: (-(f["height"] or 0), -(f["fps"] or 0)))
     return out
 
 
