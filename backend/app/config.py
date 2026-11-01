@@ -42,6 +42,11 @@ class Settings:
     # database down long before it inconveniences a download.
     disk_reserve_mb: int = int(os.getenv("DISK_RESERVE_MB", "500"))
 
+    # How long a copied download link keeps working. It carries its own
+    # authorisation, so anyone holding it can fetch that file for this long
+    # without an account -- the window is the whole of the exposure.
+    download_link_days: int = int(os.getenv("DOWNLOAD_LINK_DAYS", "7"))
+
     # Sessions
     secret_key: str = _required("SECRET_KEY")
     session_days: int = int(os.getenv("SESSION_DAYS", "30"))

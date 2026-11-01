@@ -24,6 +24,7 @@ from .access import resolve_file
 from .auth import current_user
 from .config import settings
 from .db import get_db
+from .downloads import serve_video
 from .models import User, Video
 
 log = logging.getLogger("videos")
@@ -177,15 +178,7 @@ def download_video(video_id: int, user: User = Depends(current_user), db: DbSess
     authenticates it, so the browser does the transfer with a real progress
     bar instead of the page buffering it into memory first.
     """
-    video = _own(db, user, video_id)
-    path = resolve_file(video.file_path)
-    name = f"{video.title[:120]}.{video.container or 'mp4'}".replace("/", "-").replace("\\", "-")
-    return FileResponse(
-        path,
-        media_type=DOWNLOAD_TYPE,
-        filename=name,
-        headers={"Cache-Control": "private, no-cache"},
-    )
+    return serve_video(db, user, video_id)
 
 
 @router.get("/{video_id}/thumb")

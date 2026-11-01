@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue, XIcon as X , DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon as ArrowsClockwise, CaretDownIcon as CaretDown, EyeIcon as Eye, EyeSlashIcon as EyeSlash, FolderOpenIcon as FolderOpen, MagnifyingGlassIcon as MagnifyingGlass, QueueIcon as Queue, XIcon as X , DownloadSimpleIcon as DownloadSimple, LinkSimpleIcon as LinkSimple } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
 import TrackRow from "./TrackRow";
 import TrackMenu from "./TrackMenu";
 import ImportResults from "./ImportResults";
 import { Button, IconButton } from "./Button";
+import useCopyLink from "./useCopyLink";
 import { Empty, ErrorBox, Skeleton } from "./States";
 import { api } from "../api";
 import { useData, usePlayer, useToast } from "../state";
@@ -26,6 +27,7 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState(() => new Set());
+  const copyLink = useCopyLink();
   const [importing, setImporting] = useState(false);
   const [results, setResults] = useState(null);
   const [menuTrack, setMenuTrack] = useState(null);
@@ -205,6 +207,9 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
           <Button as="a" small download
             href={`/api/downloads/zip?${[...selected].map((t) => `folder=${encodeURIComponent(t)}`).join("&")}`}>
             <DownloadSimple size={16} weight="bold" />Download
+          </Button>
+          <Button small onClick={() => copyLink({ kind: "zip", folders: [...selected] })} disabled={importing}>
+            <LinkSimple size={16} weight="bold" />Copy link
           </Button>
           <IconButton size="sm" label="Clear selection" onClick={() => setSelected(new Set())} disabled={importing}>
             <X size={16} weight="bold" />

@@ -7,12 +7,13 @@ import Modal from "../components/Modal";
 import { Button, IconButton } from "../components/Button";
 import { Skeleton, ErrorBox, Empty } from "../components/States";
 import { api, fmt, fmtSize as size } from "../api";
+import useCopyLink from "../components/useCopyLink";
 import { useFetch, useToast } from "../state";
 
 // Resolution reads better than raw pixels, and the height is what people name.
 const quality = (v) => (v.height ? `${v.height}p` : "");
 
-function VideoCard({ video, onDelete }) {
+function VideoCard({ video, onDelete, onCopy }) {
   const detail = [quality(video), video.duration ? fmt(video.duration) : "", size(video.file_size)]
     .filter(Boolean).join(" · ");
   return (
@@ -51,6 +52,10 @@ function VideoCard({ video, onDelete }) {
           label={`Download ${video.title}`} className="text-mute hover:text-ink">
           <DownloadSimple size={18} weight="bold" />
         </IconButton>
+        <IconButton size="sm" label={`Copy download link for ${video.title}`} onClick={() => onCopy(video)}
+          className="text-mute hover:text-ink">
+          <LinkSimple size={18} weight="bold" />
+        </IconButton>
         <IconButton size="sm" label={`Delete ${video.title}`} onClick={() => onDelete(video)}
           className="text-mute hover:text-danger">
           <Trash size={18} weight="bold" />
@@ -65,6 +70,7 @@ function VideoCard({ video, onDelete }) {
 export default function Videos() {
   const { data, loading, error, reload } = useFetch("/api/videos?limit=200");
   const { showToast } = useToast();
+  const copyLink = useCopyLink();
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -106,7 +112,8 @@ export default function Videos() {
           </Empty>
         ) : (
           <ul className="space-y-2">
-            {items.map((v) => <VideoCard key={v.id} video={v} onDelete={setPending} />)}
+            {items.map((v) => <VideoCard key={v.id} video={v} onDelete={setPending}
+              onCopy={(x) => copyLink({ kind: "video", id: x.id })} />)}
           </ul>
         )
       )}

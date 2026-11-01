@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CaretLeftIcon as CaretLeft, CheckIcon as Check, DownloadSimpleIcon as DownloadSimple, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
+import { CaretLeftIcon as CaretLeft, CheckIcon as Check, DownloadSimpleIcon as DownloadSimple, InfoIcon as Info, ListPlusIcon as ListPlus, MinusCircleIcon as MinusCircle, PencilSimpleIcon as PencilSimple, LinkSimpleIcon as LinkSimple, QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, TrashIcon as Trash } from "@phosphor-icons/react";
 import Modal from "./Modal";
 import TrackHeader from "./TrackHeader";
 import Field from "./Field";
 import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import useFocusTrap from "./useFocusTrap";
+import useCopyLink from "./useCopyLink";
 import { api } from "../api";
 import { useAuth, useData, useFetch, usePlayer, useToast } from "../state";
 import { transition, ease } from "../motion";
@@ -90,6 +91,7 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
   const { bump } = useData();
   const { patchTrack, dropTrack, addToQueue } = usePlayer();
   const { showToast } = useToast();
+  const copyLink = useCopyLink();
 
   // Queue it where it will not disturb what is playing: at the end.
   const queueTrack = () => {
@@ -232,6 +234,9 @@ export default function TrackMenu({ track: initialTrack, onClose, playlistId, fu
             <Item as="a" icon={DownloadSimple} download
               href={isFolder ? `/api/library/file/${track.id}/download` : `/api/tracks/${track.id}/download`}
               label={`Download ${track.title}`}>Download</Item>
+            <Item icon={LinkSimple} onClick={() => copyLink(
+              isFolder ? { kind: "folder", token: track.id } : { kind: "track", id: track.id })}
+              label={`Copy download link for ${track.title}`}>Copy download link</Item>
             {!isFolder && (
               <>
                 <Item icon={ListPlus} onClick={() => setView("playlists")}>Add to playlist</Item>

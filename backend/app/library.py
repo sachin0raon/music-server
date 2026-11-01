@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from .auth import current_user
 from .config import settings
-from .downloads import download_name
+from .downloads import serve_folder
 from .db import get_db
 from .models import Track, User
 from .tracks import (
@@ -392,16 +392,7 @@ def download_file(token: str, user: User = Depends(current_user)):
 
     No extra rule: a folder file is visible to any signed-in user either way.
     """
-    path = _path_for(token)
-    if path is None:
-        raise HTTPException(status_code=404, detail="Not found")
-    title, artist = folder_tags(token)
-    return FileResponse(
-        path,
-        media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
-        filename=download_name(title, artist, path.suffix.lower(), path.name),
-        headers={"Cache-Control": "private, no-store"},
-    )
+    return serve_folder(token)
 
 
 @router.get("/file/{token}/stream")

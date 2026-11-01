@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
-import { QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, MinusCircleIcon as MinusCircle, DownloadSimpleIcon as DownloadSimple, TrashIcon as Trash, XIcon as X } from "@phosphor-icons/react";
+import { QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, MinusCircleIcon as MinusCircle, DownloadSimpleIcon as DownloadSimple, LinkSimpleIcon as LinkSimple, TrashIcon as Trash, XIcon as X } from "@phosphor-icons/react";
 import Modal from "./Modal";
 import { Button, IconButton } from "./Button";
+import useCopyLink from "./useCopyLink";
 import { api } from "../api";
 import { useData, usePlayer, useToast } from "../state";
 
@@ -41,6 +42,7 @@ export default function SelectionActions({ scope, selected, onClear }) {
   const { addToQueue, dropTracks } = usePlayer();
   const { showToast } = useToast();
   const { bump } = useData();
+  const copyLink = useCopyLink();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -113,6 +115,9 @@ export default function SelectionActions({ scope, selected, onClear }) {
             suggest it had. */}
         <Button as="a" small href={zipHref} download>
           <DownloadSimple size={16} weight="bold" />Download
+        </Button>
+        <Button small onClick={() => copyLink({ kind: "zip", tracks: selected.map((t) => t.id) })} disabled={busy}>
+          <LinkSimple size={16} weight="bold" />Copy link
         </Button>
         {toShare.length > 0 && (
           <Button small onClick={() => setShared(toShare, true)} disabled={busy}>

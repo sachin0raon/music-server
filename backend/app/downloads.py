@@ -17,13 +17,16 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DbSession
 
 from .access import get_visible_track, resolve_file
 from .auth import current_user
+from .config import settings
 from .db import get_db
-from .models import User
+from .models import User, Video
+from .security import sign_payload, verify_payload
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
@@ -69,6 +72,51 @@ def _unique(name: str, taken: set[str]) -> str:
     out = f"{stem} ({n}){ext}"
     taken.add(out)
     return out
+
+
+MEDIA_TYPES = {
+    ".mp3": "audio/mpeg", ".flac": "audio/flac", ".m4a": "audio/mp4",
+    ".ogg": "audio/ogg", ".opus": "audio/ogg", ".wav": "audio/wav",
+}
+ATTACHMENT = {"Cache-Control": "private, no-store"}
+
+
+def serve_track(db: DbSession, user: User, track_id: int) -> FileResponse:
+    """One track as an attachment, for whoever may already stream it."""
+    track = get_visible_track(db, user, track_id)
+    path = resolve_file(track.file_path)
+    return FileResponse(
+        path,
+        media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+        filename=download_name(track.title, track.artist, path.suffix.lower(), track.original_name),
+        headers=ATTACHMENT,
+    )
+
+
+def serve_folder(token: str) -> FileResponse:
+    from .library import _path_for, folder_tags
+
+    path = _path_for(token)
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    title, artist = folder_tags(token)
+    return FileResponse(
+        path,
+        media_type=MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+        filename=download_name(title, artist, path.suffix.lower(), path.name),
+        headers=ATTACHMENT,
+    )
+
+
+def serve_video(db: DbSession, user: User, video_id: int) -> FileResponse:
+    video = db.get(Video, video_id)
+    # 404 rather than 403: a wrong id and someone else's should be
+    # indistinguishable, or the answer says what exists.
+    if video is None or video.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Not found")
+    path = resolve_file(video.file_path)
+    name = download_name(video.title, video.uploader, f".{video.container or 'mp4'}", video.original_name)
+    return FileResponse(path, media_type="application/octet-stream", filename=name, headers=ATTACHMENT)
 
 
 def _collect(tracks: list[int], folders: list[str], user: User, db: DbSession):
@@ -191,7 +239,11 @@ async def download_zip(
     if len(track) + len(folder) > MAX_ITEMS:
         raise HTTPException(status_code=400, detail="Too many items in one download")
 
-    entries, skipped = _collect(track, folder, user, db)
+    return _zip_response(track, folder, user, db)
+
+
+def _zip_response(tracks: list[int], folders: list[str], user: User, db: DbSession) -> StreamingResponse:
+    entries, skipped = _collect(tracks, folders, user, db)
     if not entries and not skipped:
         raise HTTPException(status_code=404, detail="Nothing to download")
 
@@ -205,3 +257,91 @@ async def download_zip(
             "Cache-Control": "private, no-store",
         },
     )
+
+
+# ---------- copied links ----------
+#
+# These carry their own authorisation, which is the point and the cost: anyone
+# holding one can fetch that file without an account, because a download
+# manager on another machine has no session to present.
+#
+# Two things keep the blast radius down. The link expires, and redeeming it
+# re-runs the same visibility check against the user who made it -- so a track
+# that stops being shared, or an account that is deleted, takes its links with
+# it rather than leaving them working.
+
+KINDS = {"track", "folder", "video", "zip"}
+
+
+class LinkBody(BaseModel):
+    kind: str = Field(pattern="^(track|folder|video|zip)$")
+    id: int | None = None
+    token: str | None = Field(default=None, max_length=512)
+    tracks: list[int] = Field(default_factory=list)
+    folders: list[str] = Field(default_factory=list)
+
+
+@router.post("/link")
+def create_link(body: LinkBody, user: User = Depends(current_user), db: DbSession = Depends(get_db)):
+    """A link to something the caller can already download.
+
+    Checked now as well as at redemption: issuing a link for a track you cannot
+    see should fail where you can see it fail, not silently produce a URL that
+    404s for whoever you send it to.
+    """
+    payload: dict = {"k": body.kind, "u": user.id}
+    if body.kind == "track":
+        if body.id is None:
+            raise HTTPException(status_code=400, detail="Missing track")
+        get_visible_track(db, user, body.id)
+        payload["id"] = body.id
+    elif body.kind == "video":
+        if body.id is None:
+            raise HTTPException(status_code=400, detail="Missing video")
+        serve_video(db, user, body.id)  # raises 404 unless it is theirs
+        payload["id"] = body.id
+    elif body.kind == "folder":
+        if not body.token:
+            raise HTTPException(status_code=400, detail="Missing file")
+        serve_folder(body.token)
+        payload["t"] = body.token
+    else:
+        if not body.tracks and not body.folders:
+            raise HTTPException(status_code=400, detail="Nothing selected")
+        if len(body.tracks) + len(body.folders) > MAX_ITEMS:
+            raise HTTPException(status_code=400, detail="Too many items in one download")
+        payload["ts"] = body.tracks
+        payload["fs"] = body.folders
+
+    token, expires = sign_payload(payload, settings.download_link_days * 24 * 3600)
+    return {"token": token, "expires_at": expires, "days": settings.download_link_days}
+
+
+@router.get("/open")
+def open_link(token: str = Query(max_length=8192), db: DbSession = Depends(get_db)):
+    """Redeem a copied link. Deliberately the one route with no session.
+
+    Everything is re-resolved as the user who created the link, so the link
+    grants what they could reach at this moment -- not what they could reach
+    when they copied it.
+    """
+    data = verify_payload(token)
+    if data is None:
+        # One answer for forged, damaged and expired alike: distinguishing them
+        # tells whoever is probing which part to keep trying.
+        raise HTTPException(status_code=404, detail="This link is no longer valid")
+
+    issuer = db.get(User, data.get("u"))
+    if issuer is None:
+        raise HTTPException(status_code=404, detail="This link is no longer valid")
+
+    kind = data.get("k")
+    if kind == "track":
+        return serve_track(db, issuer, data["id"])
+    if kind == "video":
+        return serve_video(db, issuer, data["id"])
+    if kind == "folder":
+        return serve_folder(data["t"])
+    if kind == "zip":
+        return _zip_response(data.get("ts") or [], data.get("fs") or [], issuer, db)
+    raise HTTPException(status_code=404, detail="This link is no longer valid")
