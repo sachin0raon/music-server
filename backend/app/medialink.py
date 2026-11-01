@@ -296,6 +296,47 @@ def _video_formats(info: dict) -> list[dict]:
     return out
 
 
+def _census(info: dict) -> str:
+    """What the site actually returned, summarised for a log line.
+
+    Never a format url: those carry signed tokens. Codecs, ids and dimensions
+    are enough to tell "the site sent nothing usable" apart from "it sent
+    plenty and we filtered it out", which is the question an empty result
+    cannot answer on its own.
+    """
+    formats = _formats_of(info)
+    # "declared none" and "undeclared" are deliberately separate: the first is a
+    # storyboard, which we drop on purpose, the second is an extractor that said
+    # nothing, which we keep by trusting the container. Conflating them would
+    # hide exactly the difference this line exists to show.
+    kinds = {"audio": 0, "video": 0, "muxed": 0, "declared none": 0, "undeclared": 0}
+    for f in formats:
+        vc, ac = f.get("vcodec"), f.get("acodec")
+        if vc is None and ac is None:
+            kinds["undeclared"] += 1
+            continue
+        if vc == "none" and ac == "none":
+            kinds["declared none"] += 1
+            continue
+        v = (vc or "none") != "none" or bool(f.get("height") or f.get("width"))
+        a = (ac or "none") != "none"
+        if v and a:
+            kinds["muxed"] += 1
+        elif v:
+            kinds["video"] += 1
+        elif a:
+            kinds["audio"] += 1
+        else:
+            kinds["declared none"] += 1
+    sample = ", ".join(
+        f"{f.get('format_id')}/{f.get('ext')}/{f.get('vcodec')}/{f.get('acodec')}"
+        f"{'/' + str(f.get('height')) + 'p' if f.get('height') else ''}"
+        for f in formats[:6]
+    )
+    counts = ", ".join(f"{n} {k}" for k, n in kinds.items() if n)
+    return f"{len(formats)} format(s) [{counts or 'empty'}]; first few: {sample or 'none'}"
+
+
 def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     from yt_dlp import YoutubeDL
     from yt_dlp.utils import DownloadError
@@ -340,6 +381,8 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
 
     formats = _audio_formats(info) or _muxed_formats(info)
     videos = _video_formats(info)
+    log.info("Probe of %s returned %s -> kept %s audio, %s video",
+             url, _census(info), len(formats), len(videos))
     if not formats and not videos:
         # Reached when the site answered but withheld the streams -- YouTube
         # does this to clients it does not trust, returning only storyboards.
