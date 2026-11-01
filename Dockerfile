@@ -42,29 +42,40 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
+# Run unprivileged. uid/gid 1000 matches the usual first host user, so files the app
+# writes into the ./data bind mount stay owned by that user on the host.
+#
+# /data is chowned flat rather than -R: it is an empty mount point here, and the
+# entrypoint re-checks ownership at startup anyway, which is the only moment a
+# bind mount's real owner is knowable. Nothing chowns /app -- the app only reads
+# it, PYTHONDONTWRITEBYTECODE keeps Python from trying to write .pyc beside the
+# source, and a recursive chown would copy every file into a fresh layer to
+# change a bit the process never consults.
+RUN groupadd --gid 1000 app \
+ && useradd --uid 1000 --gid 1000 --no-create-home --shell /usr/sbin/nologin app \
+ && mkdir -p /data \
+ && chown app:app /data
+
 # Found on PATH by yt-dlp; nothing in the app references it directly.
-COPY --from=deno /deno /usr/local/bin/deno
+COPY --link --from=deno /deno /usr/local/bin/deno
+
+# Above the application code because it changes far less often, so editing a
+# view does not reinvalidate it.
+COPY --link --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 COPY backend/requirements.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
-COPY backend/app ./app
-COPY --from=frontend /frontend/dist ./static
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# --link: these layers are built independently of the ones beneath them, so a
+# new base image or an earlier layer changing does not force them to be redone.
+COPY --link backend/app ./app
+COPY --link --from=frontend /frontend/dist ./static
 
 # Defaults match backend/app/config.py. FORWARDED_ALLOW_IPS is which peers may set
 # X-Forwarded-For (read by uvicorn); set it in .env to the proxy's address.
 ENV STATIC_DIR=/app/static \
     DATA_DIR=/data \
     FORWARDED_ALLOW_IPS=127.0.0.1
-
-# Run unprivileged. uid/gid 1000 matches the usual first host user, so files the app
-# writes into the ./data bind mount stay owned by that user on the host.
-RUN groupadd --gid 1000 app \
- && useradd --uid 1000 --gid 1000 --no-create-home --shell /usr/sbin/nologin app \
- && mkdir -p /data \
- && chown -R app:app /data /app \
- && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8000
 
