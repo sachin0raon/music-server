@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { QueueIcon as Queue, ShareNetworkIcon as ShareNetwork, MinusCircleIcon as MinusCircle, DownloadSimpleIcon as DownloadSimple, LinkSimpleIcon as LinkSimple, TrashIcon as Trash, XIcon as X } from "@phosphor-icons/react";
 import Modal from "./Modal";
-import { Button, IconButton } from "./Button";
+import { Button } from "./Button";
 import useCopyLink from "./useCopyLink";
 import { api } from "../api";
 import { useData, usePlayer, useToast } from "../state";
@@ -99,10 +99,10 @@ export default function SelectionActions({ scope, selected, onClear }) {
 
   return (
     <>
-      {/* Labels stay short and Clear is an icon: with five controls the full
-          wording wrapped onto three lines on a phone, the same way the folder
-          toolbar did. flex-wrap remains the fallback for a selection that needs
-          every button at once. */}
+      {/* Labels stay short, but Clear is worded now: it was an icon to keep the
+          row on one line, and with Download and Copy link added it wraps on a
+          phone whatever we do. A lone X among worded buttons is then just the
+          one control you have to guess at. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <p className="mr-auto whitespace-nowrap text-small text-mute" role="status">
           {selected.length} selected
@@ -134,9 +134,9 @@ export default function SelectionActions({ scope, selected, onClear }) {
             <Trash size={16} weight="bold" />Delete {owned.length}
           </Button>
         )}
-        <IconButton size="sm" label="Clear selection" onClick={onClear} disabled={busy}>
-          <X size={16} weight="bold" />
-        </IconButton>
+        <Button small onClick={onClear} disabled={busy}>
+          <X size={16} weight="bold" />Clear
+        </Button>
       </div>
 
       {confirming && (

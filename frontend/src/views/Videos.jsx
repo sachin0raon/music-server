@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { DownloadSimpleIcon as DownloadSimple, TrashIcon as Trash, FilmSlateIcon as FilmSlate, LinkSimpleIcon as LinkSimple, PlusIcon as Plus } from "@phosphor-icons/react";
+import { DotsThreeIcon as DotsThree, FilmSlateIcon as FilmSlate, PlusIcon as Plus } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
-import Modal from "../components/Modal";
+import VideoMenu from "../components/VideoMenu";
 import { Button, IconButton } from "../components/Button";
 import { Skeleton, ErrorBox, Empty } from "../components/States";
-import { api, fmt, fmtSize as size } from "../api";
-import useCopyLink from "../components/useCopyLink";
-import { useFetch, useToast } from "../state";
+import { fmt, fmtSize as size } from "../api";
+import { useFetch } from "../state";
 
 // Resolution reads better than raw pixels, and the height is what people name.
 const quality = (v) => (v.height ? `${v.height}p` : "");
 
-function VideoCard({ video, onDelete, onCopy }) {
+function VideoCard({ video, onMenu }) {
   const detail = [quality(video), video.duration ? fmt(video.duration) : "", size(video.file_size)]
     .filter(Boolean).join(" · ");
   return (
@@ -44,23 +43,12 @@ function VideoCard({ video, onDelete, onCopy }) {
         </p>
       </div>
 
-      <div className="flex shrink-0 items-start gap-1">
-        {/* A plain link, not fetch: the session cookie already authorises it, so
-            the browser transfers it with its own progress and resumability
-            instead of the page holding gigabytes in memory. */}
-        <IconButton as="a" href={`/api/videos/${video.id}/file`} download size="sm"
-          label={`Download ${video.title}`} className="text-mute hover:text-ink">
-          <DownloadSimple size={18} weight="bold" />
-        </IconButton>
-        <IconButton size="sm" label={`Copy download link for ${video.title}`} onClick={() => onCopy(video)}
-          className="text-mute hover:text-ink">
-          <LinkSimple size={18} weight="bold" />
-        </IconButton>
-        <IconButton size="sm" label={`Delete ${video.title}`} onClick={() => onDelete(video)}
-          className="text-mute hover:text-danger">
-          <Trash size={18} weight="bold" />
-        </IconButton>
-      </div>
+      {/* One trigger rather than a row of icons: on a phone three of them left
+          almost nothing for the title, and each was a guess until tapped. */}
+      <IconButton label={`More options for ${video.title}`} onClick={() => onMenu(video)}
+        className="shrink-0 self-start text-mute">
+        <DotsThree size={24} weight="bold" />
+      </IconButton>
     </GlassPanel>
   );
 }
@@ -69,24 +57,7 @@ function VideoCard({ video, onDelete, onCopy }) {
 // server has no route that shows anyone else's, and no way to share one.
 export default function Videos() {
   const { data, loading, error, reload } = useFetch("/api/videos?limit=200");
-  const { showToast } = useToast();
-  const copyLink = useCopyLink();
-  const [pending, setPending] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  const confirmDelete = async () => {
-    setBusy(true);
-    try {
-      await api.del(`/api/videos/${pending.id}`);
-      showToast("Video deleted");
-      setPending(null);
-      reload();
-    } catch (e) {
-      showToast(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [menu, setMenu] = useState(null);
 
   const items = data?.items || [];
 
@@ -112,32 +83,13 @@ export default function Videos() {
           </Empty>
         ) : (
           <ul className="space-y-2">
-            {items.map((v) => <VideoCard key={v.id} video={v} onDelete={setPending}
-              onCopy={(x) => copyLink({ kind: "video", id: x.id })} />)}
+            {items.map((v) => <VideoCard key={v.id} video={v} onMenu={setMenu} />)}
           </ul>
         )
       )}
 
-      {pending && (
-        <Modal label="Confirm delete" title="Delete this video?"
-          onClose={() => (busy ? null : setPending(null))}>
-          <p className="text-body text-mute">
-            <span className="text-ink">{pending.title}</span> will be removed from the server.
-            {pending.file_size ? ` That frees ${size(pending.file_size)}.` : ""} It can&rsquo;t be undone,
-            and re-downloading it means fetching the whole file again.
-          </p>
-          {pending.source_url && (
-            <p className="mt-2 truncate text-micro text-mute">
-              <LinkSimple size={12} className="mr-1 inline" />{pending.source_url}
-            </p>
-          )}
-          <div className="mt-4 flex gap-2">
-            <Button onClick={() => setPending(null)} disabled={busy} className="flex-1">Keep it</Button>
-            <Button variant="danger" onClick={confirmDelete} disabled={busy} className="flex-1">
-              {busy ? "Deleting…" : "Delete"}
-            </Button>
-          </div>
-        </Modal>
+      {menu && (
+        <VideoMenu video={menu} onClose={() => setMenu(null)} onDeleted={reload} />
       )}
     </>
   );

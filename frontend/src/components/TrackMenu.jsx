@@ -8,25 +8,13 @@ import { Button, IconButton } from "./Button";
 import TrackDetailsLoader from "./TrackDetails";
 import useFocusTrap from "./useFocusTrap";
 import useCopyLink from "./useCopyLink";
+import Item from "./MenuItem";
 import { api } from "../api";
 import { useAuth, useData, useFetch, usePlayer, useToast } from "../state";
 import { transition, ease } from "../motion";
 
 const VIEW_ENTER = { duration: 0.14, delay: 0.03, ease: ease.smooth };
 const VIEW_EXIT = { duration: 0.05, ease: ease.smooth };
-
-// `as` exists for the download, which has to be a real link: the session
-// cookie already authorises it, so the browser can own the transfer instead of
-// the page pulling the file into memory first.
-function Item({ as: Tag = "button", icon: Icon, children, onClick, danger, disabled, label, initialFocus, ...rest }) {
-  return (
-    <Tag onClick={onClick} disabled={Tag === "button" ? disabled : undefined} aria-label={label}
-      data-autofocus={initialFocus ? "" : undefined} {...rest}
-      className={`interactive flex min-h-12 w-full items-center gap-3.5 rounded-tile px-2 text-left text-body disabled:opacity-50 ${danger ? "text-danger" : ""}`}>
-      <Icon size={22} className={danger ? "" : "text-mute"} />{children}
-    </Tag>
-  );
-}
 
 function PlaylistPicker({ track, onDone }) {
   const { data, loading, error } = useFetch("/api/playlists");
