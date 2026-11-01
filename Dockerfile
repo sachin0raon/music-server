@@ -12,6 +12,20 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 COPY frontend/ ./
 RUN npm run build
 
+# ---- Stage 1b: a JavaScript runtime for yt-dlp ----
+# YouTube's player challenge is solved in JavaScript. Without a runtime yt-dlp
+# warns that extraction is deprecated and "some formats may be missing" -- and
+# missing can mean all of them, which is an empty format list and a link that
+# looks unsupported for no stated reason.
+#
+# deno is the only runtime yt-dlp enables without being told to (js_runtimes
+# defaults to {'deno': {}}), and the alternatives cannot come from apt anyway:
+# yt-dlp wants node 22+ where Debian ships 18, and a quickjs newer than
+# bookworm's. Taken from the official image as a pinned single binary rather
+# than curl'ed at build time, so two builds of this commit produce the same
+# thing.
+FROM denoland/deno:bin-2.9.8 AS deno
+
 # ---- Stage 2: Python backend serving API + built frontend ----
 FROM python:3.12-slim
 WORKDIR /app
@@ -27,6 +41,9 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/*
+
+# Found on PATH by yt-dlp; nothing in the app references it directly.
+COPY --from=deno /deno /usr/local/bin/deno
 
 COPY backend/requirements.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt

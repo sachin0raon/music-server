@@ -296,6 +296,29 @@ def _video_formats(info: dict) -> list[dict]:
     return out
 
 
+class _YtdlpLog:
+    """Routes yt-dlp's own messages into this app's log.
+
+    report_warning consults a logger before it consults no_warnings, so these
+    arrive even though the probe runs quietly. That matters: when a site
+    returns no formats at all, the reason -- a sign-in check, a stream the
+    extractor could not reach, a missing token -- is only ever stated in a
+    warning, and running quietly was throwing it away.
+    """
+
+    def debug(self, msg: str) -> None:
+        log.debug("yt-dlp: %s", msg)
+
+    # yt-dlp calls info() on some paths and not others; both are chatter.
+    info = debug
+
+    def warning(self, msg: str) -> None:
+        log.warning("yt-dlp: %s", msg)
+
+    def error(self, msg: str) -> None:
+        log.warning("yt-dlp: %s", msg)
+
+
 def _census(info: dict) -> str:
     """What the site actually returned, summarised for a log line.
 
@@ -346,6 +369,9 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
         "no_warnings": True,
         "noplaylist": True,  # a link copied from the address bar often carries ?list=
         "skip_download": True,
+        # Keeps yt-dlp's explanation of a thin or empty result, which quiet and
+        # no_warnings would otherwise discard.
+        "logger": _YtdlpLog(),
         # Probing does its own filtering of info["formats"], so yt-dlp's format
         # selection is a step we never use -- and it is fatal by default. A site
         # that returns only storyboards, or anything the default selector cannot
