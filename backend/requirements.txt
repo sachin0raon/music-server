@@ -14,3 +14,10 @@ yt-dlp==2026.10.26
 # fetch it at run time (--remote-components), so no executable code arrives
 # from the network after the image is built.
 yt-dlp-ejs==0.8.0
+
+# Telegram upload. Pure-Python wheel (py3-none-any), no compiler needed.
+# tgcrypto (the C speedup, via kurigram[fast]) has no prebuilt wheel for
+# Python 3.12+ -- pulling it in would mean adding build tools to the Dockerfile
+# for a speed optimization, not a requirement. Falls back to pyaes, slower per
+# chunk; revisit only if upload throughput turns out to matter.
+kurigram==2.2.26

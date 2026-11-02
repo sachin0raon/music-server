@@ -26,6 +26,7 @@ from .config import settings
 from .db import get_db
 from .downloads import serve_video
 from .models import User, Video
+from .telegram import _link_for
 
 log = logging.getLogger("videos")
 
@@ -89,6 +90,15 @@ def video_out(v: Video) -> dict:
         "source_url": v.source_url,
         "has_thumb": bool(v.thumb_path),
         "created_at": v.created_at,
+        "telegram_uploaded_at": v.telegram_uploaded_at,
+        "telegram_chat_title": v.telegram_chat_title,
+        # A clickable link only when one can honestly be formed -- Saved
+        # Messages has no shareable link, since it is a private chat with
+        # yourself.
+        "telegram_link": (
+            _link_for(v.telegram_chat_type, v.telegram_chat_id, v.telegram_message_id)
+            if v.telegram_uploaded_at and v.telegram_chat_id else None
+        ),
     }
 
 

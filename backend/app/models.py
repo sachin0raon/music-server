@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String,
-    UniqueConstraint, func,
+    Text, UniqueConstraint, func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -23,6 +23,7 @@ class User(Base):
 
     tracks: Mapped[list["Track"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
     videos: Mapped[list["Video"]] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
+    telegram_account: Mapped["TelegramAccount | None"] = relationship(back_populates="owner", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Session(Base):
@@ -144,4 +145,59 @@ class Video(Base):
     thumb_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
+    # Set once a Telegram upload finishes. The chat name is a snapshot, not a
+    # live join to TelegramAccount.target_chat_title: re-targeting later must
+    # not relabel where a past upload actually went.
+    telegram_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    telegram_chat_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Also snapshotted, not read from the live TelegramAccount row: building a
+    # link needs the chat's id and type, and by the time someone looks at an
+    # old upload's badge the current target may be a different chat entirely.
+    telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    telegram_chat_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    telegram_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     owner: Mapped[User] = relationship(back_populates="videos")
+
+
+class TelegramAccount(Base):
+    """A user's own Telegram login, used to upload videos to a chat they pick.
+
+    One row per user, not a flag on User: this is optional configuration with
+    its own lifecycle -- connect, disconnect, reconnect, relogin -- not an
+    intrinsic property of the account, the same reasoning that kept Video off
+    Track.
+
+    api_hash and session_string are plaintext, consistent with cookies.txt:
+    whoever reached this credential on disk already reached everything else on
+    this server. session_string is a live Telegram login -- full account
+    control, not just one site's download access -- which is a materially
+    larger risk than the cookie file, accepted explicitly rather than assumed.
+    """
+
+    __tablename__ = "telegram_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+
+    api_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    api_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Display only ("+91 xxxx…"); never re-sent to Telegram once logged in.
+    phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Set once a login completes. Never returned to the browser as a value to
+    # copy -- only its presence (via `status`) is ever exposed.
+    session_string: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Flips on login success and reconnect, off on disconnect. Never implies a
+    # live connection is held open -- nothing in this feature keeps one: every
+    # operation connects fresh and disconnects when done. This is purely the
+    # status the UI shows.
+    is_connected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    target_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    target_chat_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_chat_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # channel | group | saved
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    owner: Mapped[User] = relationship(back_populates="telegram_account")

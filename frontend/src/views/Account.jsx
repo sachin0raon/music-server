@@ -5,6 +5,7 @@ import GlassPanel from "../components/GlassPanel";
 import Field from "../components/Field";
 import CookieSettings from "../components/CookieSettings";
 import StorageSettings from "../components/StorageSettings";
+import TelegramSettings from "../components/TelegramSettings";
 import { Button } from "../components/Button";
 import { Skeleton, ErrorBox } from "../components/States";
 import { api } from "../api";
@@ -104,6 +105,7 @@ export default function Account() {
         <ChangePassword />
         <CookieSettings />
         <StorageSettings />
+        <TelegramSettings />
         {user.is_admin && <Admin />}
         <Button onClick={logout}><SignOut size={18} />Sign out</Button>
       </div>

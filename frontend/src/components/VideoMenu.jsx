@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { ArrowSquareOutIcon as ArrowSquareOut, DownloadSimpleIcon as DownloadSimple, FilmSlateIcon as FilmSlate, LinkSimpleIcon as LinkSimple, TrashIcon as Trash } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { ArrowSquareOutIcon as ArrowSquareOut, DownloadSimpleIcon as DownloadSimple, FilmSlateIcon as FilmSlate, LinkSimpleIcon as LinkSimple, PaperPlaneTiltIcon as PaperPlaneTilt, TrashIcon as Trash } from "@phosphor-icons/react";
 import Modal from "./Modal";
 import Item from "./MenuItem";
 import { Button } from "./Button";
@@ -7,6 +8,8 @@ import useFocusTrap from "./useFocusTrap";
 import useCopyLink from "./useCopyLink";
 import { api, fmt, fmtSize as size } from "../api";
 import { useToast } from "../state";
+
+const RUNNING = new Set(["queued", "uploading"]);
 
 // Inside the dialog rather than stacked on it: two modals both listen for
 // Escape on the window, so one press would answer the prompt and close the
@@ -36,11 +39,23 @@ function DeletePrompt({ video, busy, onKeep, onDelete }) {
 // What you can do with a downloaded video, in the same shape the track menu
 // uses. On a phone three icon buttons per card left almost no room for the
 // title, and an icon is a guess until you tap it.
-export default function VideoMenu({ video, onClose, onDeleted, fullScreen = false }) {
+export default function VideoMenu({ video, onClose, onDeleted, fullScreen = false, telegram, job, onUpload }) {
   const { showToast } = useToast();
   const copyLink = useCopyLink();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const startUpload = async () => {
+    setUploading(true);
+    try {
+      await onUpload(video);
+    } catch (e) {
+      showToast(e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const remove = async () => {
     setBusy(true);
@@ -107,6 +122,39 @@ export default function VideoMenu({ video, onClose, onDeleted, fullScreen = fals
         <Item as="a" icon={ArrowSquareOut} href={video.source_url}
           target="_blank" rel="noopener noreferrer"
           label={`Open the page ${video.title} came from`}>Open source page</Item>
+      )}
+
+      {/* The persisted badge wins over a live job: once video.telegram_uploaded_at
+          is set, that is the truth, and a stale job snapshot from before a
+          reload must not contradict it. */}
+      {video.telegram_uploaded_at ? (
+        <p className="flex min-h-12 items-center gap-3.5 rounded-tile px-2 text-body text-mute">
+          <PaperPlaneTilt size={22} />
+          <span className="min-w-0 flex-1 truncate">
+            Sent to {video.telegram_chat_title}
+            {video.telegram_link && (
+              <> &middot; <a href={video.telegram_link} target="_blank" rel="noopener noreferrer"
+                  className="text-accent underline underline-offset-2">View</a></>
+            )}
+          </span>
+        </p>
+      ) : job && RUNNING.has(job.state) ? (
+        <Item icon={PaperPlaneTilt} disabled label={`Uploading ${video.title} to Telegram`}>
+          {job.state === "queued" ? "Waiting to upload…" : `Uploading… ${Math.round(job.percent)}%`}
+        </Item>
+      ) : telegram?.is_connected && telegram?.target_chat_title ? (
+        <>
+          <Item icon={PaperPlaneTilt} onClick={startUpload} disabled={uploading}
+            label={`Upload ${video.title} to Telegram`}>
+            {uploading ? "Starting…" : job?.state === "error" ? "Retry Telegram upload" : "Upload to Telegram"}
+          </Item>
+          {job?.state === "error" && <p className="px-2 pb-1 text-micro text-danger">{job.error}</p>}
+        </>
+      ) : (
+        <p className="px-2 py-2 text-micro text-mute">
+          <Link to="/account" className="text-accent underline underline-offset-2">Set up Telegram in Account</Link>{" "}
+          to upload videos there.
+        </p>
       )}
 
       <Item icon={Trash} danger onClick={() => setConfirming(true)}
