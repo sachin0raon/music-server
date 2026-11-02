@@ -7,7 +7,7 @@ import EqBars from "./EqBars";
 import { IconButton } from "./Button";
 import { fmt } from "../api";
 import { usePlayer } from "../state";
-import { transition } from "../motion";
+import { staggerDelay, transition } from "../motion";
 
 // Pure memoized track row: skips re-rendering when other rows change (rerender-memo)
 const PureTrackRow = memo(function PureTrackRow({
@@ -19,7 +19,8 @@ const PureTrackRow = memo(function PureTrackRow({
   const reduce = useReducedMotion();
   return (
     <motion.li ref={rowRef} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={reduce ? { duration: 0 } : { ...transition.base, delay: index < 12 ? index * 0.022 : 0 }}
+      exit={{ opacity: 0, y: reduce ? 0 : -8, transition: reduce ? { duration: 0 } : transition.fast }}
+      transition={reduce ? { duration: 0 } : { ...transition.base, delay: staggerDelay(index) }}
       className={`track-row-item group relative flex items-center gap-1 pr-2 transition-[background-color] duration-[160ms] sm:pr-3 ${active ? "bg-accent-soft" : selected ? "bg-white/[0.08]" : "hover:bg-white/[0.05] has-[:focus-visible]:bg-white/[0.05]"}`}>
       {selectable && (
         <button type="button" role="checkbox" aria-checked={selected} aria-label={`Select ${track.title}`}

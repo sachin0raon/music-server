@@ -36,6 +36,11 @@ export default function Ambient({ track, className = "" }) {
           style={{ background }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          // Its own duration/ease rather than motion.js's shared tokens: this is
+          // a slow backdrop crossfade behind everything else, not UI chrome, so
+          // it is deliberately far longer (1s) and linear (constant rate, no
+          // ease-in/out) rather than reusing a token tuned for quick interface
+          // motion.
           transition={{ duration: reduce ? 0 : 1, ease: "linear" }}
           onAnimationComplete={() => setBase(background)}
         />

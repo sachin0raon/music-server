@@ -289,7 +289,7 @@ export default function MediaLinkImport() {
               than a bar inching along on nothing. */}
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
-              className={`h-full rounded-full bg-accent transition-[width] duration-300 ${job.state === "downloading" ? "" : "animate-pulse"}`}
+              className={`h-full rounded-full bg-accent transition-[width] duration-[220ms] ${job.state === "downloading" ? "" : "animate-pulse"}`}
               style={{ width: job.state === "downloading" ? `${job.percent}%` : "100%" }}
             />
           </div>

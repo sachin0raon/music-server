@@ -13,7 +13,7 @@ import { Empty, ErrorBox, Skeleton } from "../components/States";
 import { api } from "../api";
 import { useData, useFetch, usePlayer, useToast } from "../state";
 import useSelection from "../components/useSelection";
-import { transition } from "../motion";
+import { staggerDelay, transition } from "../motion";
 
 export function PlaylistsIndex() {
   const { data, loading, error, reload } = useFetch("/api/playlists");
@@ -42,16 +42,19 @@ export function PlaylistsIndex() {
         <Empty title="No playlists yet" icon={Playlist}>Name one above, then add tracks from the menu on any song.</Empty>
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
-          {data.map((p, i) => (
-            <motion.li key={p.id} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
-              transition={reduce ? { duration: 0 } : { ...transition.base, delay: i < 12 ? i * 0.03 : 0 }}>
-              <Link to={`/playlists/${p.id}`} className="glass interactive block rounded-card p-3 transition-transform duration-[220ms] ease-out hover:-translate-y-0.5">
-                <PlaylistArt id={p.id} className="aspect-square w-full" />
-                <span className="mt-3 block truncate text-body font-medium">{p.name}</span>
-                <span className="block text-small text-mute">{p.track_count} {p.track_count === 1 ? "track" : "tracks"}</span>
-              </Link>
-            </motion.li>
-          ))}
+          <AnimatePresence>
+            {data.map((p, i) => (
+              <motion.li key={p.id} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: reduce ? 0 : -8, transition: reduce ? { duration: 0 } : transition.fast }}
+                transition={reduce ? { duration: 0 } : { ...transition.base, delay: staggerDelay(i) }}>
+                <Link to={`/playlists/${p.id}`} className="glass interactive block rounded-card p-3 transition-transform duration-[220ms] ease-out hover:-translate-y-0.5">
+                  <PlaylistArt id={p.id} className="aspect-square w-full" />
+                  <span className="mt-3 block truncate text-body font-medium">{p.name}</span>
+                  <span className="block text-small text-mute">{p.track_count} {p.track_count === 1 ? "track" : "tracks"}</span>
+                </Link>
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       )}
     </>
@@ -182,15 +185,17 @@ export function PlaylistDetail() {
             <>
               <p aria-live="polite" className="sr-only">{announce}</p>
               <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-                {order.map((t, i) => {
-                  const active = current?.id === t.id;
-                  return (
-                    <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
-                      selectable selected={isSelected(t)} onSelect={toggle}
-                      onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)}
-                      active={active} eq={active && playing} onPlay={playTrack} />
-                  );
-                })}
+                <AnimatePresence>
+                  {order.map((t, i) => {
+                    const active = current?.id === t.id;
+                    return (
+                      <TrackRow key={t.id} track={t} list={order} onMenu={setMenu} index={i}
+                        selectable selected={isSelected(t)} onSelect={toggle}
+                        onMove={(delta) => move(i, delta)} at={i + 1} total={order.length} rowRef={setRowRef(t.id)}
+                        active={active} eq={active && playing} onPlay={playTrack} />
+                    );
+                  })}
+                </AnimatePresence>
               </GlassPanel>
             </>
           )}

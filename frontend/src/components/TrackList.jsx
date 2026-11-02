@@ -72,24 +72,32 @@ export default function TrackList({ scope, q, letter, empty, featured, onTotal, 
       )}
       <SelectionActions scope={scope} selected={selected} onClear={clear} />
       <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-        {items.map((t, i) => {
-          const active = current?.id === t.id;
-          return (
-            <TrackRow
-              key={t.id}
-              track={t}
-              list={items}
-              onMenu={setMenu}
-              index={i}
-              selectable={scope === "shared" ? t.owned : true}
-              selected={isSelected(t)}
-              onSelect={toggle}
-              active={active}
-              eq={active && playing}
-              onPlay={playTrack}
-            />
-          );
-        })}
+        {/* A row's own exit is defined on TrackRow itself; this is only what
+            lets that exit actually play instead of the row just vanishing.
+            initial stays true (the default): the stagger is wanted on this
+            list's first render too -- Library remounts TrackList per tab via
+            its own key, so "first render" here means "just switched tabs",
+            not "the app just started". */}
+        <AnimatePresence>
+          {items.map((t, i) => {
+            const active = current?.id === t.id;
+            return (
+              <TrackRow
+                key={t.id}
+                track={t}
+                list={items}
+                onMenu={setMenu}
+                index={i}
+                selectable={scope === "shared" ? t.owned : true}
+                selected={isSelected(t)}
+                onSelect={toggle}
+                active={active}
+                eq={active && playing}
+                onPlay={playTrack}
+              />
+            );
+          })}
+        </AnimatePresence>
       </GlassPanel>
       {error && <p role="alert" className="mt-3 text-small text-danger">{error}</p>}
       {items.length < total && (

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { PlaylistIcon as Playlist, MagnifyingGlassIcon as MagnifyingGlass, MusicNotesIcon as MusicNotes, FilmSlateIcon as FilmSlate, UserCircleIcon as UserCircle, WarningCircleIcon as WarningCircle, XIcon as X } from "@phosphor-icons/react";
 import { AuthProvider, DataProvider, PlayerProvider, ToastProvider, useAuth, usePlayer, useToast } from "./state";
 import Ambient from "./components/Ambient";
@@ -50,6 +50,7 @@ function Shell() {
   const { open, track, queue, index } = usePlayer();
   const location = useLocation();
   const { pathname } = location;
+  const reduce = useReducedMotion();
   return (
     <div className="isolate min-h-[100dvh]">
       <a href="#main" className="glass-raised fixed left-3 top-3 z-[60] -translate-y-20 rounded-full px-4 py-2 text-small font-medium focus:translate-y-0">Skip to content</a>
@@ -82,7 +83,7 @@ function Shell() {
           <AnimatePresence mode="wait">
             <motion.div key={pathname}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-              transition={transition.base}>
+              transition={reduce ? transition.reducedFade : transition.base}>
               <Suspense fallback={null}>
                 <Routes location={location}>
                   <Route path="/" element={<Page><Library /></Page>} />
@@ -139,6 +140,7 @@ function Gate() {
 
 function ToastContainer() {
   const { toasts, dismiss } = useToast();
+  const reduce = useReducedMotion();
   return (
     <div
       aria-live="polite"
@@ -151,7 +153,7 @@ function ToastContainer() {
             initial={{ opacity: 0, y: -16, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.95 }}
-            transition={transition.base}
+            transition={reduce ? transition.reducedFade : transition.base}
             role="alert"
             className="glass-raised pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl border border-line-strong px-4 py-3 shadow-2xl"
           >

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DotsThreeIcon as DotsThree, FilmSlateIcon as FilmSlate, PlusIcon as Plus } from "@phosphor-icons/react";
 import PageHeader from "../components/PageHeader";
 import GlassPanel from "../components/GlassPanel";
@@ -7,6 +8,7 @@ import VideoMenu from "../components/VideoMenu";
 import { Button, IconButton } from "../components/Button";
 import { Skeleton, ErrorBox, Empty } from "../components/States";
 import { api, fmt, fmtSize as size } from "../api";
+import { staggerDelay, transition } from "../motion";
 import { useFetch } from "../state";
 
 const POLL_MS = 1000;
@@ -15,11 +17,17 @@ const RUNNING = new Set(["queued", "uploading"]);
 // Resolution reads better than raw pixels, and the height is what people name.
 const quality = (v) => (v.height ? `${v.height}p` : "");
 
-function VideoCard({ video, job, onMenu }) {
+function VideoCard({ video, job, onMenu, index }) {
+  const reduce = useReducedMotion();
   const detail = [quality(video), video.duration ? fmt(video.duration) : "", size(video.file_size)]
     .filter(Boolean).join(" · ");
   return (
-    <GlassPanel as="li" className="flex flex-col gap-2 p-3">
+    // The same entrance every other list in the app gives a newly loaded row
+    // (TrackRow, playlist tiles) -- this was the one list with none at all.
+    <GlassPanel as={motion.li} initial={{ opacity: 0, y: reduce ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: reduce ? 0 : -8, transition: reduce ? { duration: 0 } : transition.fast }}
+      transition={reduce ? { duration: 0 } : { ...transition.base, delay: staggerDelay(index) }}
+      className="flex flex-col gap-2 p-3">
       <div className="flex gap-3">
         <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-xl bg-white/5">
           {video.has_thumb ? (
@@ -65,7 +73,7 @@ function VideoCard({ video, job, onMenu }) {
       {job && RUNNING.has(job.state) && (
         <div>
           <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-accent transition-[width] duration-300"
+            <div className="h-full rounded-full bg-accent transition-[width] duration-[220ms]"
               style={{ width: `${job.state === "uploading" ? job.percent : 4}%` }} />
           </div>
           <p className="mt-1 text-micro text-mute">
@@ -165,9 +173,11 @@ export default function Videos() {
           </Empty>
         ) : (
           <ul className="space-y-2">
-            {items.map((v) => (
-              <VideoCard key={v.id} video={v} job={jobsByVideo[v.id]} onMenu={setMenu} />
-            ))}
+            <AnimatePresence>
+              {items.map((v, i) => (
+                <VideoCard key={v.id} video={v} job={jobsByVideo[v.id]} onMenu={setMenu} index={i} />
+              ))}
+            </AnimatePresence>
           </ul>
         )
       )}

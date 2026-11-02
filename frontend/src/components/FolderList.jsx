@@ -219,25 +219,27 @@ export default function FolderList({ sort, q = "", letter = null, hideAdded = fa
       )}
 
       <GlassPanel as="ul" className="overflow-hidden divide-y divide-line/40">
-        {items.map((t, i) => {
-          const active = current?.id === t.id;
-          return (
-            <TrackRow
-              key={t.id}
-              track={t}
-              list={items}
-              source={SOURCE}
-              index={i}
-              selectable={!t.in_library}
-              selected={selected.has(t.id)}
-              onSelect={toggle}
-              onMenu={setMenuTrack}
-              active={active}
-              eq={active && playing}
-              onPlay={playTrack}
-            />
-          );
-        })}
+        <AnimatePresence>
+          {items.map((t, i) => {
+            const active = current?.id === t.id;
+            return (
+              <TrackRow
+                key={t.id}
+                track={t}
+                list={items}
+                source={SOURCE}
+                index={i}
+                selectable={!t.in_library}
+                selected={selected.has(t.id)}
+                onSelect={toggle}
+                onMenu={setMenuTrack}
+                active={active}
+                eq={active && playing}
+                onPlay={playTrack}
+              />
+            );
+          })}
+        </AnimatePresence>
       </GlassPanel>
 
       {err && <p role="alert" className="mt-3 text-small text-danger">{err}</p>}
