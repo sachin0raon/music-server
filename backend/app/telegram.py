@@ -102,10 +102,18 @@ def _sweep_pending() -> None:
 
 def _disconnect_quietly(client) -> None:
     """Best-effort: a pending login being swept or replaced must not leak a
-    socket, but a failure to close one is not worth surfacing to anyone."""
-    import asyncio
+    socket, but a failure to close one is not worth surfacing to anyone.
+
+    A plain call, not awaited: Kurigram patches every async Client method at
+    import time (pyrogram/sync.py's async_to_sync) so it runs to completion
+    and returns the real result when called outside a running loop in this
+    thread -- which Starlette's threadpool always is. Wrapping it in
+    asyncio.run() a second time hands asyncio.run() an already-resolved value
+    instead of a coroutine, which is exactly what crashed the real server:
+    "a coroutine was expected, got False".
+    """
     try:
-        asyncio.run(client.disconnect())
+        client.disconnect()
     except Exception as exc:  # noqa: BLE001 -- genuinely don't care why
         log.debug("Disconnecting an abandoned Telegram client: %s", exc)
 
@@ -242,9 +250,9 @@ def login_start(body: LoginStartBody, user: User = Depends(current_user)):
     _drop_pending_for(user.id)
 
     client = Client(f"pending-{user.id}", api_id=body.api_id, api_hash=body.api_hash, in_memory=True)
-    _async(client.connect())
+    client.connect()
     try:
-        sent = _async(client.send_phone_number_code(body.phone_number))
+        sent = client.send_phone_number_code(body.phone_number)
     except RPCError as exc:
         _disconnect_quietly(client)
         raise HTTPException(status_code=400, detail=_explain(exc)) from exc
@@ -259,15 +267,6 @@ def login_start(body: LoginStartBody, user: User = Depends(current_user)):
     return {"token": token}
 
 
-def _async(coro):
-    """Runs one coroutine to completion. Each request handler and each worker
-    thread gets its own throwaway loop -- there is no shared asyncio runtime
-    to coordinate with, since FastAPI's own loop never touches these calls
-    directly (they run via Depends-free, plain sync route functions)."""
-    import asyncio
-    return asyncio.run(coro)
-
-
 def _take_pending(token: str, owner_id: int) -> PendingLogin:
     with _pending_lock:
         _sweep_pending()
@@ -279,7 +278,7 @@ def _take_pending(token: str, owner_id: int) -> PendingLogin:
 
 def _finish_login(token: str, entry: PendingLogin, api_id: int, api_hash: str,
                    db: DbSession, owner_id: int) -> dict:
-    session_string = _async(entry.client.export_session_string())
+    session_string = entry.client.export_session_string()
     _disconnect_quietly(entry.client)
     with _pending_lock:
         _pending.pop(token, None)
@@ -308,7 +307,7 @@ def login_code(body: LoginCodeBody, user: User = Depends(current_user), db: DbSe
 
     entry = _take_pending(body.token, user.id)
     try:
-        _async(entry.client.sign_in(entry.phone_number, entry.phone_code_hash, body.code))
+        entry.client.sign_in(entry.phone_number, entry.phone_code_hash, body.code)
     except SessionPasswordNeeded:
         # The pending entry survives: the same connected client is reused for
         # the password step, and a wrong code does not force restarting the
@@ -327,7 +326,7 @@ def login_password(body: LoginPasswordBody, user: User = Depends(current_user), 
 
     entry = _take_pending(body.token, user.id)
     try:
-        _async(entry.client.check_password(body.password))
+        entry.client.check_password(body.password)
     except RPCError as exc:
         raise HTTPException(status_code=400, detail=_explain(exc)) from exc
 
@@ -349,7 +348,7 @@ def reconnect(user: User = Depends(current_user), db: DbSession = Depends(get_db
     client = Client(f"reconnect-{user.id}", api_id=account.api_id, api_hash=account.api_hash,
                      session_string=account.session_string, in_memory=True)
     try:
-        _async(client.connect())
+        client.connect()
     except RPCError as exc:
         raise HTTPException(status_code=400, detail=f"That login no longer works: {_explain(exc)}") from exc
     finally:
@@ -436,13 +435,17 @@ def list_chats(user: User = Depends(current_user), db: DbSession = Depends(get_d
 
     client = _client_from_account(account, f"chats-{user.id}")
 
-    async def run():
-        await client.connect()
+    # Plain, not async: Kurigram's sync-wrapping (pyrogram/sync.py) makes
+    # get_dialogs a regular generator and every other call here a regular
+    # blocking one when invoked outside a running loop in this thread, which
+    # Starlette's threadpool always is. No await, no asyncio.run.
+    def run():
+        client.connect()
         try:
-            me = await client.get_me()
+            me = client.get_me()
             out = []
             checked_channels = 0
-            async for dialog in client.get_dialogs():
+            for dialog in client.get_dialogs():
                 chat = dialog.chat
                 direct = classify_chat(chat, me.id)
                 if direct is not None:
@@ -453,17 +456,17 @@ def list_chats(user: User = Depends(current_user), db: DbSession = Depends(get_d
                     continue
                 checked_channels += 1
                 try:
-                    member = await client.get_chat_member(chat.id, "me")
+                    member = client.get_chat_member(chat.id, "me")
                 except RPCError:
                     continue
                 if channel_can_post(member.status, member.privileges):
                     out.append({"id": chat.id, "title": chat.title, "type": "channel"})
             return out
         finally:
-            await client.disconnect()
+            client.disconnect()
 
     try:
-        chats = _async(run())
+        chats = run()
     except RPCError as exc:
         raise HTTPException(status_code=400, detail=_explain(exc)) from exc
     return {"chats": chats}
@@ -531,24 +534,25 @@ def _run_upload(job: Job, owner_id: int, video_id: int) -> None:
                 if total:
                     job.set(state="uploading", percent=min(99.0, current / total * 100))
 
-            async def run():
-                await client.connect()
+            # Plain, not async -- see list_chats for why.
+            def run():
+                client.connect()
                 try:
-                    me = await client.get_me()
+                    me = client.get_me()
                     ceiling = SIZE_CEILING_PREMIUM if me.is_premium else SIZE_CEILING_FREE
                     if video.file_size > ceiling:
                         limit = "4000 MB (Premium)" if me.is_premium else "2000 MB"
                         raise ValueError(f"This video is larger than Telegram's limit for this account (~{limit}).")
-                    return await client.send_document(
+                    return client.send_document(
                         account.target_chat_id, str(path),
                         file_name=Path(video.file_path).name,
                         caption=video.title, progress=progress,
                     )
                 finally:
-                    await client.disconnect()
+                    client.disconnect()
 
             job.set(state="uploading", percent=0.0)
-            message = _async(run())
+            message = run()
 
             video.telegram_uploaded_at = datetime.now(timezone.utc)
             video.telegram_chat_title = account.target_chat_title
