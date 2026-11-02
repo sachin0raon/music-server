@@ -15,8 +15,14 @@ const TABS = [["mine", "My music"], ["shared", "Shared"]];
 const FOLDER_TAB = ["folder", "Server music"];
 const DEFAULT_SORT = "added_desc";
 export const TAB_STORAGE_KEY = "player.library.tab";
-export const LETTER_STORAGE_KEY = "player.library.letter";
 export const HIDE_ADDED_STORAGE_KEY = "player.folder.hide_added";
+
+// Sort and letter are preferences of a tab, not of the page: My Music, Shared
+// and Server music are three different lists, and picking "Title A-Z, letter
+// B" in one had been silently applying to whichever tab you switched to next,
+// both in the URL and in what got remembered. One key per tab for each.
+const sortKeyFor = (tab) => `player.library.sort.${tab}`;
+const letterKeyFor = (tab) => `player.library.letter.${tab}`;
 
 function getSavedTab(folderOk) {
   try {
@@ -27,9 +33,9 @@ function getSavedTab(folderOk) {
   }
 }
 
-function getSavedLetter() {
+function getSavedLetter(tab) {
   try {
-    const l = localStorage.getItem(LETTER_STORAGE_KEY);
+    const l = localStorage.getItem(letterKeyFor(tab));
     return l && (l === "#" || (l.length === 1 && l.toUpperCase() >= "A" && l.toUpperCase() <= "Z")) ? l.toUpperCase() : null;
   } catch {
     return null;
@@ -54,10 +60,10 @@ export default function Library() {
 
   // Persistent sort preference: URL query parameter takes priority if present, otherwise localStorage
   const sortParam = params.get("sort");
-  const sort = SORTS.some(([id]) => id === sortParam) ? sortParam : getSavedSort(DEFAULT_SORT);
+  const sort = SORTS.some(([id]) => id === sortParam) ? sortParam : getSavedSort(DEFAULT_SORT, sortKeyFor(tab));
   const isTitleSort = sort === "title_asc" || sort === "title_desc";
   const letterParam = params.get("letter");
-  const letter = isTitleSort ? (letterParam !== null ? (letterParam || null) : getSavedLetter()) : null;
+  const letter = isTitleSort ? (letterParam !== null ? (letterParam || null) : getSavedLetter(tab)) : null;
   const hideAddedParam = params.get("hide_added");
   const hideAdded = hideAddedParam !== null ? hideAddedParam === "true" : getSavedHideAdded();
   // Subtitle always renders (even with 0 tracks) so the header height never shifts
@@ -79,19 +85,19 @@ export default function Library() {
     if (value === fallback) next.delete(key); else next.set(key, value);
     if (key === "sort" && value !== "title_asc" && value !== "title_desc") {
       next.delete("letter");
-      try { localStorage.removeItem(LETTER_STORAGE_KEY); } catch {}
+      try { localStorage.removeItem(letterKeyFor(tab)); } catch {}
     }
     if (key === "q" && value.trim()) {
       next.delete("letter");
-      try { localStorage.removeItem(LETTER_STORAGE_KEY); } catch {}
+      try { localStorage.removeItem(letterKeyFor(tab)); } catch {}
     }
     setParams(next, { replace: true });
   };
 
   const handleLetterSelect = (newLetter) => {
     try {
-      if (newLetter) localStorage.setItem(LETTER_STORAGE_KEY, newLetter);
-      else localStorage.removeItem(LETTER_STORAGE_KEY);
+      if (newLetter) localStorage.setItem(letterKeyFor(tab), newLetter);
+      else localStorage.removeItem(letterKeyFor(tab));
     } catch {}
     const next = new URLSearchParams(params);
     if (newLetter) next.set("letter", newLetter);
@@ -103,6 +109,16 @@ export default function Library() {
     try { localStorage.setItem(TAB_STORAGE_KEY, id); } catch {}
     const next = new URLSearchParams(params);
     if (id === "mine") next.delete("tab"); else next.set("tab", id);
+
+    // The tab just left behind its sort and letter in the URL otherwise --
+    // swap in the tab being switched to's own remembered choice instead,
+    // the same way the tab itself is restored from storage on first load.
+    const nextSort = getSavedSort(DEFAULT_SORT, sortKeyFor(id));
+    if (nextSort === DEFAULT_SORT) next.delete("sort"); else next.set("sort", nextSort);
+    const nextIsTitleSort = nextSort === "title_asc" || nextSort === "title_desc";
+    const nextLetter = nextIsTitleSort ? getSavedLetter(id) : null;
+    if (nextLetter) next.set("letter", nextLetter); else next.delete("letter");
+
     setParams(next, { replace: true });
   };
 
@@ -178,7 +194,8 @@ export default function Library() {
               </button>
             )}
           </div>
-          <SortSelect value={sort} onChange={(v) => update("sort", v, DEFAULT_SORT)} className="shrink-0" />
+          <SortSelect value={sort} onChange={(v) => update("sort", v, DEFAULT_SORT)}
+            persistKey={sortKeyFor(tab)} className="shrink-0" />
         </div>
       </div>
       {showAlphabet && (

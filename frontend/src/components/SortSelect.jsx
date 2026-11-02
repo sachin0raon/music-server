@@ -10,9 +10,12 @@ export const SORTS = [
 
 export const SORT_STORAGE_KEY = "player.sort";
 
-export function getSavedSort(fallback = "added_desc") {
+// `key` defaults to the single shared preference (what Search uses); a page
+// with more than one independent list, like Library's tabs, passes its own
+// key per list so picking a sort in one does not silently change another.
+export function getSavedSort(fallback = "added_desc", key = SORT_STORAGE_KEY) {
   try {
-    const s = localStorage.getItem(SORT_STORAGE_KEY);
+    const s = localStorage.getItem(key);
     return SORTS.some(([id]) => id === s) ? s : fallback;
   } catch {
     return fallback;
