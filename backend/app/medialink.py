@@ -66,6 +66,16 @@ _video_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="videolink")
 JOB_TTL_SECONDS = 30 * 60  # how long a finished job stays readable
 PROBE_TIMEOUT_SECONDS = 30
 PROBE_CACHE_SECONDS = 5 * 60
+
+# Where yt-dlp keeps its own on-disk cache (solved YouTube "n" challenges,
+# mainly). The container runs as a non-root user with no home directory, so
+# yt-dlp's default of $HOME/.cache resolves to a path it cannot write to --
+# whatever HOME happened to be left as by the entrypoint's privilege drop,
+# almost always root's. That is a silent perf regression, not a request
+# failure (yt-dlp treats a cache write failure as a warning), but it means
+# every single request re-solves the challenge from scratch. Pointed at the
+# data volume instead, which this process already owns.
+CACHE_DIR = str(settings.data_dir / "cache" / "yt-dlp")
 PROBE_CACHE_MAX = 64
 MP3_BITRATES = (128, 192, 256, 320)
 
@@ -101,6 +111,26 @@ def _explain(exc: Exception) -> str:
     if "unavailable" in text or "removed" in text:
         return "That item is unavailable."
     return "Could not read that link."
+
+
+# Phrases that mean "this site just blocked an automated-looking client", not
+# "this item genuinely cannot be fetched" -- YouTube's bot-check in particular
+# is applied per-request and is not deterministic, so a plain repeat often
+# succeeds where the first attempt did not. Deliberately narrow: a private or
+# removed video must never retry, since the outcome cannot change.
+_TRANSIENT_HINTS = (
+    "no video formats",
+    "sign in to confirm",  # YouTube's bot-check wording specifically, not the
+                            # broader "sign in if you've been granted access"
+                            # a genuinely private video uses
+    "cookies are no longer valid",
+    "requested format is not available",
+)
+
+
+def _looks_transient(text: str) -> bool:
+    text = text.lower()
+    return any(hint in text for hint in _TRANSIENT_HINTS)
 
 
 # ---------- cookies ----------
@@ -419,6 +449,16 @@ def _census(info: dict) -> str:
     return f"{len(formats)} format(s) [{counts or 'empty'}]; first few: {sample or 'none'}"
 
 
+# One retry, not a loop: this only recovers two narrow cases -- a YouTube
+# bot-check, which is applied per-request and is not deterministic, and a
+# cookie that _cookie_opts just rotated out from under a failed attempt (its
+# `finally` adopts whatever yt-dlp wrote back before this function ever sees
+# the exception). Neither reason improves with a third try, and the probe is
+# meant to answer synchronously while someone is looking at the page.
+PROBE_RETRY_ATTEMPTS = 2
+PROBE_RETRY_DELAY_SECONDS = 1.5
+
+
 def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
     from yt_dlp import YoutubeDL
     from yt_dlp.utils import DownloadError
@@ -438,55 +478,69 @@ def _probe(url: str, user_id: int = 0, use_cookies: bool = False) -> dict:
         # while the formats we actually wanted were sitting in the result.
         "ignore_no_formats_error": True,
         "socket_timeout": PROBE_TIMEOUT_SECONDS,
+        "cachedir": CACHE_DIR,
     }
-    try:
-        with _cookie_opts(user_id, use_cookies) as cookie_opts:
-            log.info("Probing %s (cookies: %s)", url, "yes" if cookie_opts else "no")
-            with YoutubeDL({**opts, **cookie_opts}) as ydl:
-                info = ydl.extract_info(url, download=False)
-    except DownloadError as exc:
-        # The message the user sees is deliberately vague; the real one is the
-        # only thing that says whether a sign-in was the problem.
-        log.warning("Probe failed for %s (cookies: %s): %s", url, use_cookies, exc)
-        raise LinkError(_explain(exc)) from exc
-    except Exception as exc:  # an extractor can raise almost anything
-        log.warning("Probe failed for %s (cookies: %s): %s", url, use_cookies, exc)
-        raise LinkError(_explain(exc)) from exc
 
-    if info is None:
-        raise LinkError("Could not read that link.")
-    if info.get("_type") == "playlist":
-        # noplaylist should have prevented this; a bare playlist URL still reaches it.
-        raise LinkError("That link is a playlist. Paste a link to a single track.")
-    # A live stream has no end, so it downloads until something stops it or the
-    # disk is full, and its size cannot be estimated. Both disk guards are blind
-    # to it, which makes refusing it here the only place that works.
-    if info.get("is_live"):
-        raise LinkError("That is a live stream. Wait until it has finished and try again.")
+    for attempt in range(1, PROBE_RETRY_ATTEMPTS + 1):
+        retrying = attempt < PROBE_RETRY_ATTEMPTS
+        try:
+            with _cookie_opts(user_id, use_cookies) as cookie_opts:
+                log.info("Probing %s (cookies: %s)", url, "yes" if cookie_opts else "no")
+                with YoutubeDL({**opts, **cookie_opts}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+        except DownloadError as exc:
+            if retrying and _looks_transient(str(exc)):
+                log.info("Probe of %s attempt %s/%s looked transient, retrying -- %s",
+                          url, attempt, PROBE_RETRY_ATTEMPTS, exc)
+                time.sleep(PROBE_RETRY_DELAY_SECONDS)
+                continue
+            # The message the user sees is deliberately vague; the real one is
+            # the only thing that says whether a sign-in was the problem.
+            log.warning("Probe failed for %s (cookies: %s): %s", url, use_cookies, exc)
+            raise LinkError(_explain(exc)) from exc
+        except Exception as exc:  # an extractor can raise almost anything
+            log.warning("Probe failed for %s (cookies: %s): %s", url, use_cookies, exc)
+            raise LinkError(_explain(exc)) from exc
 
-    formats = _audio_formats(info) or _muxed_formats(info)
-    videos = _video_formats(info)
-    log.info("Probe of %s returned %s -> kept %s audio, %s video",
-             url, _census(info), len(formats), len(videos))
-    if not formats and not videos:
-        # Reached when the site answered but withheld the streams -- YouTube
-        # does this to clients it does not trust, returning only storyboards.
-        # Signed-in cookies from a datacenter address make that likelier, not
-        # less, so the suggestion is worth making where it can be acted on.
-        raise LinkError(
-            "That link offered nothing downloadable. The site may be withholding it; "
-            + ("try again with cookies turned off." if use_cookies
-               else "signing in from Account settings and turning cookies on may help.")
-        )
+        if info is None:
+            raise LinkError("Could not read that link.")
+        if info.get("_type") == "playlist":
+            # noplaylist should have prevented this; a bare playlist URL still reaches it.
+            raise LinkError("That link is a playlist. Paste a link to a single track.")
+        # A live stream has no end, so it downloads until something stops it or the
+        # disk is full, and its size cannot be estimated. Both disk guards are blind
+        # to it, which makes refusing it here the only place that works.
+        if info.get("is_live"):
+            raise LinkError("That is a live stream. Wait until it has finished and try again.")
 
-    return {
-        "title": info.get("title") or "",
-        "uploader": info.get("uploader") or info.get("channel") or "",
-        "duration": info.get("duration"),
-        "thumbnail": info.get("thumbnail"),
-        "formats": formats,
-        "video_formats": videos,
-    }
+        formats = _audio_formats(info) or _muxed_formats(info)
+        videos = _video_formats(info)
+        log.info("Probe of %s returned %s -> kept %s audio, %s video",
+                 url, _census(info), len(formats), len(videos))
+        if not formats and not videos:
+            if retrying:
+                log.info("Probe of %s attempt %s/%s came back with nothing downloadable, retrying",
+                          url, attempt, PROBE_RETRY_ATTEMPTS)
+                time.sleep(PROBE_RETRY_DELAY_SECONDS)
+                continue
+            # Reached when the site answered but withheld the streams -- YouTube
+            # does this to clients it does not trust, returning only storyboards.
+            # Signed-in cookies from a datacenter address make that likelier, not
+            # less, so the suggestion is worth making where it can be acted on.
+            raise LinkError(
+                "That link offered nothing downloadable. The site may be withholding it; "
+                + ("try again with cookies turned off." if use_cookies
+                   else "signing in from Account settings and turning cookies on may help.")
+            )
+
+        return {
+            "title": info.get("title") or "",
+            "uploader": info.get("uploader") or info.get("channel") or "",
+            "duration": info.get("duration"),
+            "thumbnail": info.get("thumbnail"),
+            "formats": formats,
+            "video_formats": videos,
+        }
 
 
 # ---------- jobs ----------
@@ -610,6 +664,7 @@ def _download(job: Job, user_id: int, url: str, format_id: str, convert: str | N
         "postprocessors": _postprocessors(convert, bitrate),
         "writethumbnail": True,
         "socket_timeout": PROBE_TIMEOUT_SECONDS,
+        "cachedir": CACHE_DIR,
     }
 
     try:
@@ -722,6 +777,7 @@ def _download_video(job: Job, user_id: int, url: str, fmt: dict, use_cookies: bo
         # it can serve, not a picture buried in the container.
         "postprocessors": [{"key": "FFmpegThumbnailsConvertor", "format": "jpg"}],
         "socket_timeout": PROBE_TIMEOUT_SECONDS,
+        "cachedir": CACHE_DIR,
     }
 
     try:
