@@ -8,10 +8,12 @@ resolves inside MUSIC_DIR."""
 import base64
 import os
 import threading
+import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -47,6 +49,56 @@ MAX_SELECT = 500  # files a single import request may carry
 _MTIME = "_mtime"  # internal sort key, stripped before a row is returned
 _index: dict[str, dict] = {}  # relative path -> parsed tags, keyed by path
 _index_lock = threading.Lock()
+
+# ---------- caches ----------
+#
+# Both are keyed on what the filesystem says about a file, so a change on disk
+# retires the entry rather than outliving it.
+
+# The folder listing. Every list request walked the whole mount -- os.walk plus
+# a resolve() and a stat() per file -- then built a row for every file, sorted
+# them all, and sliced that down to one page of 50. A single sort change fires
+# two of those (the letter bar and the list itself), and "show more" fires
+# another, so one interaction could mean three full walks. Holding the walk for
+# a short while collapses a burst into one pass. "Check for new music" on the
+# Upload page clears it outright, which is the path to take when something has
+# just changed on disk and should show up now.
+FOLDER_TTL_SECONDS = 60
+_folder_cache: tuple[float, list[dict]] | None = None
+_folder_lock = threading.Lock()
+
+# Extracted cover art. Serving one used to re-run _read_meta per request: two
+# full mutagen parses of the file including the embedded image, ~3.4 ms each,
+# and a page of 50 rows asks for 50 at once in threadpool threads that each
+# hold the GIL while parsing. Bounded by total bytes rather than entry count --
+# covers run to hundreds of KB, so a large mount would otherwise cache
+# gigabytes of them.
+COVER_CACHE_BYTES = 64 * 1024 * 1024
+_covers: OrderedDict = OrderedDict()  # (path, mtime, size) -> (bytes, ext)
+_covers_bytes = 0
+_covers_lock = threading.Lock()
+
+
+def _cover_cached(key) -> tuple[bytes, str | None] | None:
+    with _covers_lock:
+        hit = _covers.get(key)
+        if hit is not None:
+            _covers.move_to_end(key)
+        return hit
+
+
+def _cover_store(key, cover: bytes, ext: str | None) -> None:
+    """Keeps the empty result too: a file with no art would otherwise be
+    re-parsed in full on every request for the rest of the process's life."""
+    global _covers_bytes
+    with _covers_lock:
+        if key in _covers:
+            return
+        _covers[key] = (cover, ext)
+        _covers_bytes += len(cover)
+        while _covers_bytes > COVER_CACHE_BYTES and len(_covers) > 1:
+            _, (evicted, _ext) = _covers.popitem(last=False)
+            _covers_bytes -= len(evicted)
 
 
 # ---------- the folder ----------
@@ -158,6 +210,32 @@ def _index_folder(root: Path) -> list[dict]:
     return entries
 
 
+def _folder_entries(root: Path) -> list[dict]:
+    """The folder listing, reused across a burst of requests.
+
+    The walk runs outside the lock on purpose. Two cold requests arriving
+    together will both walk, which wastes one pass; holding the lock across the
+    walk instead would queue every other reader behind it for the length of a
+    full mount scan, which is the thing being fixed.
+    """
+    global _folder_cache
+    with _folder_lock:
+        cached = _folder_cache
+    if cached and time.monotonic() - cached[0] < FOLDER_TTL_SECONDS:
+        return cached[1]
+    entries = _index_folder(root)
+    with _folder_lock:
+        _folder_cache = (time.monotonic(), entries)
+    return entries
+
+
+def invalidate_folder_cache() -> None:
+    """Drop the cached listing so the next read walks the mount again."""
+    global _folder_cache
+    with _folder_lock:
+        _folder_cache = None
+
+
 def _norm(value: str | None) -> str:
     return " ".join((value or "").lower().split())
 
@@ -183,7 +261,7 @@ def _rows(user_id: int, db: DbSession) -> list[dict]:
     root = _require_source()
     tag_keys, name_keys = _library_keys(db, user_id)
     out = []
-    for entry in _index_folder(root):
+    for entry in _folder_entries(root):
         meta = entry["meta"]
         in_library = False
         if meta["duration"]:  # tags first: robust to renamed files
@@ -282,7 +360,13 @@ def folder_files(
 
 @router.get("/scan")
 def scan_files(user: User = Depends(current_user), db: DbSession = Depends(get_db)):
-    """Every folder file that is not already in this user's library: the list to confirm."""
+    """Every folder file that is not already in this user's library: the list to confirm.
+
+    This is the "Check for new music" button, so it always walks the mount
+    rather than answering from the cached listing -- it is the one request whose
+    whole purpose is to notice what changed on disk.
+    """
+    invalidate_folder_cache()
     rows = _sorted([r for r in _rows(user.id, db) if not r["in_library"]], "title_asc")
     return {"total": len(rows), "items": _clean(rows)}
 
@@ -297,6 +381,11 @@ def _file_details_dict(token: str, path: Path, user: User, db: DbSession, force_
     if force_reload:
         with _index_lock:
             _index.pop(rel, None)
+        # Every path that rewrites a file's tags comes through here, so this is
+        # the one place the cached listing has to be dropped -- an edited title
+        # or a stripped cover would otherwise keep showing its old value in the
+        # list for the rest of the TTL.
+        invalidate_folder_cache()
     meta = _meta_for(rel, path, stat.st_mtime, stat.st_size)
     tag_keys, name_keys = _library_keys(db, user.id)
     in_library = False
@@ -418,20 +507,43 @@ def stream_file(token: str, user: User = Depends(current_user)):
 
 
 @router.get("/file/{token}/cover")
-def file_cover(token: str, user: User = Depends(current_user)):
-    """The art embedded in a folder file, read on the fly and never stored."""
+def file_cover(token: str, request: Request, user: User = Depends(current_user)):
+    """The art embedded in a folder file: parsed once, then served from memory.
+
+    Still no-cache, so the browser keeps asking and an edited cover shows up at
+    once. What changed is the cost of being asked: a revalidation that matches
+    is a stat and a 304, where it used to be two full mutagen parses of the
+    file and the image sent again.
+    """
     path = _path_for(token)
     if path is None:
         raise HTTPException(status_code=404, detail="Not found")
     try:
-        cover = _read_meta(path, path.stem)["cover"]
-    except ValueError:
-        cover = None
+        stat = path.stat()
+    except OSError:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Editing tags rewrites the file, so mtime and size are enough to retire
+    # both the cached bytes and whatever the browser is holding.
+    etag = f'W/"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+    headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+
+    key = (str(path), stat.st_mtime, stat.st_size)
+    hit = _cover_cached(key)
+    if hit is None:
+        try:
+            cover = _read_meta(path, path.stem)["cover"] or b""
+        except ValueError:
+            cover = b""
+        hit = (cover, _cover_ext(cover) if cover else None)
+        _cover_store(key, *hit)
+    cover, ext = hit
     if not cover:
         raise HTTPException(status_code=404, detail="Not found")
-    ext = _cover_ext(cover)
     return Response(content=cover, media_type=IMAGE_TYPES.get(ext or "", "image/jpeg"),
-                    headers={"Cache-Control": "private, no-cache"})
+                    headers=headers)
 
 @router.delete("/file/{token}/cover")
 def delete_file_cover(token: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)):

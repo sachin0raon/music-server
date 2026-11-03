@@ -16,8 +16,22 @@ yt-dlp==2026.10.26
 yt-dlp-ejs==0.8.0
 
 # Telegram upload. Pure-Python wheel (py3-none-any), no compiler needed.
-# tgcrypto (the C speedup, via kurigram[fast]) has no prebuilt wheel for
-# Python 3.12+ -- pulling it in would mean adding build tools to the Dockerfile
-# for a speed optimization, not a requirement. Falls back to pyaes, slower per
-# chunk; revisit only if upload throughput turns out to matter.
 kurigram==2.2.26
+
+# The C speedup for MTProto's AES-IGE, and not optional in practice.
+#
+# Without it kurigram falls back to pyaes and runs the cipher in Python: one
+# AES block call plus two int.from_bytes/to_bytes per 16 BYTES of the upload.
+# Measured at 0.37 MB/s on one core, so a 1 GB video is ~46 minutes of a core
+# pinned at 100%. Worse than the arithmetic, that loop is pure Python, so it
+# holds the GIL -- and the container runs a single uvicorn worker, so one
+# upload starves every HTTP request in the process. That is the whole app
+# going slow whenever a video is sent, not just a slow upload.
+#
+# kurigram[fast] pulls upstream tgcrypto, which stops at cp311 and ships no
+# aarch64 wheel at all -- no good on Python 3.12 or on arm64. This fork
+# publishes cp312/cp313/cp314 manylinux wheels for both aarch64 and x86_64,
+# installs as an importable `tgcrypto`, and exports the four symbols
+# kurigram's crypto/aes.py looks for, so it is picked up with no code change
+# and still needs no compiler in the image.
+tgcrypto-pyrofork==1.2.8
