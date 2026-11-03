@@ -62,7 +62,7 @@ function VideoCard({ video, job, onMenu, index }) {
 
         {/* One trigger rather than a row of icons: on a phone three of them left
             almost nothing for the title, and each was a guess until tapped. */}
-        <IconButton label={`More options for ${video.title}`} onClick={() => onMenu(video)}
+        <IconButton label={`More options for ${video.title}`} onClick={() => onMenu(video.id)}
           className="shrink-0 self-start text-mute">
           <DotsThree size={24} weight="bold" />
         </IconButton>
@@ -89,6 +89,11 @@ function VideoCard({ video, job, onMenu, index }) {
 // server has no route that shows anyone else's, and no way to share one.
 export default function Videos() {
   const { data, loading, error, reload } = useFetch("/api/videos?limit=200");
+  // An id, not the video object itself: the object is a snapshot from
+  // whichever render opened the menu, and a reload while it stays open
+  // (its own upload finishing, say) would leave the menu showing that
+  // snapshot forever. Looking it up fresh below means the menu always
+  // reflects the latest fetch, the same list it was opened from.
   const [menu, setMenu] = useState(null);
   const [telegram, setTelegram] = useState(null);
   const [jobs, setJobs] = useState([]);
@@ -142,6 +147,10 @@ export default function Videos() {
 
   const jobsByVideo = useMemo(() => Object.fromEntries(jobs.map((j) => [j.video_id, j])), [jobs]);
   const items = data?.items || [];
+  // Falls out of the menu entirely if the video disappeared from a reload
+  // (deleted from another tab, say) -- closing is the right outcome then,
+  // not showing a menu for a video that no longer exists.
+  const menuVideo = menu != null ? items.find((v) => v.id === menu) : null;
 
   return (
     <>
@@ -182,9 +191,9 @@ export default function Videos() {
         )
       )}
 
-      {menu && (
-        <VideoMenu video={menu} onClose={() => setMenu(null)} onDeleted={reload}
-          telegram={telegram} job={jobsByVideo[menu.id]} onUpload={startUpload} />
+      {menuVideo && (
+        <VideoMenu video={menuVideo} onClose={() => setMenu(null)} onDeleted={reload}
+          telegram={telegram} job={jobsByVideo[menuVideo.id]} onUpload={startUpload} />
       )}
     </>
   );
