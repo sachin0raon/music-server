@@ -6,7 +6,7 @@ import Item from "./MenuItem";
 import { Button } from "./Button";
 import useFocusTrap from "./useFocusTrap";
 import useCopyLink from "./useCopyLink";
-import { api, fmt, fmtSize as size } from "../api";
+import { api, fmt, fmtDateTime, fmtSize as size } from "../api";
 import { useToast } from "../state";
 
 const RUNNING = new Set(["queued", "uploading"]);
@@ -36,6 +36,31 @@ function DeletePrompt({ video, busy, onKeep, onDelete }) {
   );
 }
 
+// A second chance was the point of asking: sending it again replaces nothing
+// on Telegram's side, it just lands as a new message, so confirming first
+// stops an idle tap from quietly doubling up a video someone already has.
+function ReuploadPrompt({ video, busy, onKeep, onUpload }) {
+  const ref = useRef(null);
+  useFocusTrap(ref);
+  const when = fmtDateTime(video.telegram_uploaded_at);
+  return (
+    <div ref={ref} role="alertdialog" aria-modal="true" aria-label="Upload again?"
+      className="w-full max-w-xs rounded-2xl border border-line bg-surface-2 p-4 shadow-float">
+      <p className="text-body font-medium">Upload again?</p>
+      <p className="mt-1 text-small text-mute">
+        This was already sent to {video.telegram_chat_title}{when ? ` on ${when}` : ""}.
+        Uploading again sends a second copy; it does not replace the first.
+      </p>
+      <div className="mt-4 flex gap-2">
+        <Button variant="glass" className="flex-1" onClick={onKeep} disabled={busy} data-autofocus>Keep as is</Button>
+        <Button variant="accent" className="flex-1" onClick={onUpload} disabled={busy}>
+          {busy ? "Starting…" : "Upload again"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // What you can do with a downloaded video, in the same shape the track menu
 // uses. On a phone three icon buttons per card left almost no room for the
 // title, and an icon is a guess until you tap it.
@@ -43,6 +68,7 @@ export default function VideoMenu({ video, onClose, onDeleted, fullScreen = fals
   const { showToast } = useToast();
   const copyLink = useCopyLink();
   const [confirming, setConfirming] = useState(false);
+  const [confirmingReupload, setConfirmingReupload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -55,6 +81,11 @@ export default function VideoMenu({ video, onClose, onDeleted, fullScreen = fals
     } finally {
       setUploading(false);
     }
+  };
+
+  const confirmReupload = async () => {
+    setConfirmingReupload(false);
+    await startUpload();
   };
 
   const remove = async () => {
@@ -83,11 +114,14 @@ export default function VideoMenu({ video, onClose, onDeleted, fullScreen = fals
       label={`${video.title} options`}
       title={null}
       onClose={onClose}
-      onEscape={() => (confirming ? setConfirming(false) : onClose())}
+      onEscape={() => (confirming ? setConfirming(false) : confirmingReupload ? setConfirmingReupload(false) : onClose())}
       fullScreen={fullScreen}
       overlay={confirming ? (
         <DeletePrompt video={video} busy={busy}
           onKeep={() => setConfirming(false)} onDelete={remove} />
+      ) : confirmingReupload ? (
+        <ReuploadPrompt video={video} busy={uploading}
+          onKeep={() => setConfirmingReupload(false)} onUpload={confirmReupload} />
       ) : null}
     >
       <div className="mb-3 flex items-start gap-3">
@@ -124,24 +158,35 @@ export default function VideoMenu({ video, onClose, onDeleted, fullScreen = fals
           label={`Open the page ${video.title} came from`}>Open source page</Item>
       )}
 
-      {/* The persisted badge wins over a live job: once video.telegram_uploaded_at
-          is set, that is the truth, and a stale job snapshot from before a
-          reload must not contradict it. */}
-      {video.telegram_uploaded_at ? (
-        <p className="flex min-h-12 items-center gap-3.5 rounded-tile px-2 text-body text-mute">
-          <PaperPlaneTilt size={22} />
-          <span className="min-w-0 flex-1 truncate">
-            Sent to {video.telegram_chat_title}
-            {video.telegram_link && (
-              <> &middot; <a href={video.telegram_link} target="_blank" rel="noopener noreferrer"
-                  className="text-accent underline underline-offset-2">View</a></>
-            )}
-          </span>
-        </p>
-      ) : job && RUNNING.has(job.state) ? (
+      {/* A job actually running wins over the persisted badge: it is the one
+          case a re-upload the user just started should not be hidden behind
+          "Sent to ...". A job that is NOT running (done, errored, or simply
+          absent after a reload) never overrides the badge, since that is a
+          stale snapshot of the upload that already finished. */}
+      {job && RUNNING.has(job.state) ? (
         <Item icon={PaperPlaneTilt} disabled label={`Uploading ${video.title} to Telegram`}>
           {job.state === "queued" ? "Waiting to upload…" : `Uploading… ${Math.round(job.percent)}%`}
         </Item>
+      ) : video.telegram_uploaded_at ? (
+        <>
+          <p className="flex min-h-12 items-center gap-3.5 rounded-tile px-2 text-body text-mute">
+            <PaperPlaneTilt size={22} />
+            <span className="min-w-0 flex-1 truncate">
+              Sent to {video.telegram_chat_title}
+              {video.telegram_link && (
+                <> &middot; <a href={video.telegram_link} target="_blank" rel="noopener noreferrer"
+                    className="text-accent underline underline-offset-2">View</a></>
+              )}
+            </span>
+          </p>
+          {telegram?.is_connected && telegram?.target_chat_title && (
+            <Item icon={PaperPlaneTilt} onClick={() => setConfirmingReupload(true)} disabled={uploading}
+              label={`Upload ${video.title} to Telegram again`}>
+              {uploading ? "Starting…" : "Upload again"}
+            </Item>
+          )}
+          {job?.state === "error" && <p className="px-2 pb-1 text-micro text-danger">{job.error}</p>}
+        </>
       ) : telegram?.is_connected && telegram?.target_chat_title ? (
         <>
           <Item icon={PaperPlaneTilt} onClick={startUpload} disabled={uploading}

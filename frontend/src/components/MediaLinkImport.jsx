@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { LinkSimpleIcon as LinkSimple, DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react";
 import GlassPanel from "./GlassPanel";
+import Chip from "./Chip";
 import Field from "./Field";
 import { Button } from "./Button";
 import ImportResults from "./ImportResults";
@@ -162,7 +163,12 @@ export default function MediaLinkImport() {
 
   return (
     <GlassPanel className="mt-5 p-5 sm:p-6">
-      <p className="text-heading font-semibold">Add from a page</p>
+      <p className="flex items-center gap-2 text-heading font-semibold">
+        Add from a page
+        {/* Names what actually does the fetching: yt-dlp supports hundreds of
+            sites, but people only recognise the name they already trust it by. */}
+        <Chip title="Powered by yt-dlp">yt-dlp</Chip>
+      </p>
       <p className="mt-1 max-w-[68ch] text-body text-mute">
         Paste a link to a page with audio on it. The server reads what is available, you choose,
         and it downloads in the background.

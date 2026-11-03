@@ -99,3 +99,9 @@ export const fmtDate = (iso) => {
   const d = new Date(iso);
   return isNaN(d) ? null : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 };
+
+export const fmtDateTime = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d) ? null : d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+};
