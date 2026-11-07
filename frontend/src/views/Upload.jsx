@@ -78,10 +78,10 @@ export default function Upload() {
           onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </GlassPanel>
 
-      <LinkImport />
-      <MediaLinkImport />
-      <FolderScan />
-
+      {/* Right under the drop zone the file was just added to, not after every
+          other Upload section -- the list was rendering below LinkImport,
+          MediaLinkImport and FolderScan, which put a file you just dropped
+          out of sight below three unrelated panels. */}
       {files.length > 0 && (
         <GlassPanel as="ul" className="mt-5 px-4" aria-live="polite">
           {files.map((f) => (
@@ -109,6 +109,10 @@ export default function Upload() {
           <Button onClick={() => setFiles([])}>Clear list</Button>
         </div>
       )}
+
+      <LinkImport />
+      <MediaLinkImport />
+      <FolderScan />
     </>
   );
 }
